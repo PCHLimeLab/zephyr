@@ -7,13 +7,17 @@ config SOC_SERIES
 	string
 	default "cavs_v20"
 
+config SOC_TOOLCHAIN_NAME
+	string
+	default "intel_s1000"
+
 config SOC
 	string
 	default "intel_cavs_20"
 
 config SYS_CLOCK_HW_CYCLES_PER_SEC
 	default 400000000 if XTENSA_TIMER
-	default 19200000 if CAVS_TIMER
+	default 38400000 if CAVS_TIMER
 
 config SYS_CLOCK_TICKS_PER_SEC
 	default 50000

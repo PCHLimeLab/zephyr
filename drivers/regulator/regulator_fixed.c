@@ -190,7 +190,7 @@ static void start(struct onoff_manager *mgr,
 		__ASSERT_NO_MSG(data->task == WORK_TASK_UNDEFINED);
 		data->task = WORK_TASK_ENABLE;
 		data->notify = notify;
-		k_work_submit(&data->delayed_work.work);
+		k_delayed_work_submit(&data->delayed_work, K_NO_WAIT);
 		return;
 	}
 #endif /* CONFIG_MULTITHREADING */
@@ -228,7 +228,7 @@ static void stop(struct onoff_manager *mgr,
 		__ASSERT_NO_MSG(data->task == WORK_TASK_UNDEFINED);
 		data->task = WORK_TASK_DISABLE;
 		data->notify = notify;
-		k_work_submit(&data->delayed_work.work);
+		k_delayed_work_submit(&data->delayed_work, K_NO_WAIT);
 		return;
 	}
 #endif /* CONFIG_MULTITHREADING */
@@ -386,10 +386,9 @@ static const struct driver_config regulator_##id##_cfg = { \
 \
 static struct REG_DATA_TAG(id) regulator_##id##_data; \
 \
-DEVICE_AND_API_INIT(regulator_##id, DT_INST_LABEL(id), \
-		    REG_INIT(id), \
-		    &regulator_##id##_data, &regulator_##id##_cfg, \
-		    POST_KERNEL, CONFIG_REGULATOR_FIXED_INIT_PRIORITY, \
-		    &REG_API(id));
+DEVICE_DT_INST_DEFINE(id, REG_INIT(id), device_pm_control_nop, \
+		 &regulator_##id##_data, &regulator_##id##_cfg,	       \
+		 POST_KERNEL, CONFIG_REGULATOR_FIXED_INIT_PRIORITY,    \
+		 &REG_API(id));
 
 DT_INST_FOREACH_STATUS_OKAY(REGULATOR_DEVICE)

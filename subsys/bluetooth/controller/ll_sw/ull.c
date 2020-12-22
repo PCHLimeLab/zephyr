@@ -36,6 +36,7 @@
 #include "lll_adv.h"
 #include "lll_scan.h"
 #include "lll_sync.h"
+#include "lll_sync_iso.h"
 #include "lll_conn.h"
 #include "ull_adv_types.h"
 #include "ull_scan_types.h"
@@ -44,10 +45,13 @@
 #include "ull_filter.h"
 
 #include "ull_internal.h"
+#include "ull_iso_internal.h"
 #include "ull_adv_internal.h"
 #include "ull_scan_internal.h"
 #include "ull_sync_internal.h"
+#include "ull_sync_iso_internal.h"
 #include "ull_conn_internal.h"
+#include "ull_df.h"
 
 #if defined(CONFIG_BT_CTLR_USER_EXT)
 #include "ull_vendor.h"
@@ -389,6 +393,13 @@ int ll_init(struct k_sem *sem_rx)
 	if (err) {
 		return err;
 	}
+
+#if defined(CONFIG_BT_CTLR_SYNC_ISO)
+	err = ull_sync_iso_init();
+	if (err) {
+		return err;
+	}
+#endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 
 #if defined(CONFIG_BT_CONN)
@@ -398,6 +409,32 @@ int ll_init(struct k_sem *sem_rx)
 	}
 
 	err = ull_conn_init();
+	if (err) {
+		return err;
+	}
+#endif /* CONFIG_BT_CONN */
+
+#if IS_ENABLED(CONFIG_BT_CTLR_DF)
+	err = ull_df_init();
+	if (err) {
+		return err;
+	}
+#endif
+
+#if defined(CONFIG_BT_CTLR_ADV_ISO) || \
+	defined(CONFIG_BT_CTLR_SYNC_ISO) || \
+	defined(CONFIG_BT_CTLR_PERIPHERAL_ISO) || \
+	defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	err = ull_iso_init();
+	if (err) {
+		return err;
+	}
+#endif /* CONFIG_BT_CTLR_ADV_ISO || CONFIG_BT_CTLR_SYNC_ISO ||
+	* CONFIG_BT_CTLR_PERIPHERAL_ISO || CONFIG_BT_CTLR_CENTRAL_ISO
+	*/
+
+#if defined(CONFIG_BT_CTLR_ADV_ISO)
+	err = ull_adv_iso_init();
 	if (err) {
 		return err;
 	}
@@ -448,7 +485,33 @@ void ll_reset(void)
 	/* Reset periodic sync sets */
 	err = ull_sync_reset();
 	LL_ASSERT(!err);
+#if defined(CONFIG_BT_CTLR_SYNC_ISO)
+	/* Reset periodic sync sets */
+	err = ull_sync_iso_reset();
+	LL_ASSERT(!err);
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
+
+#if defined(CONFIG_BT_CTLR_ADV_ISO) || \
+	defined(CONFIG_BT_CTLR_SYNC_ISO) || \
+	defined(CONFIG_BT_CTLR_PERIPHERAL_ISO) || \
+	defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	err = ull_iso_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_CTLR_ADV_ISO || CONFIG_BT_CTLR_SYNC_ISO ||
+	* CONFIG_BT_CTLR_PERIPHERAL_ISO || CONFIG_BT_CTLR_CENTRAL_ISO
+	*/
+
+#if defined(CONFIG_BT_CTLR_ADV_ISO)
+	/* Reset periodic sync sets */
+	err = ull_adv_iso_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
+
+#if IS_ENABLED(CONFIG_BT_CTLR_DF)
+	err = ull_df_reset();
+	LL_ASSERT(!err);
+#endif
 
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
@@ -585,7 +648,7 @@ ll_rx_get_again:
 			/* Do not send up buffers to Host thread that are
 			 * marked for release
 			 */
-			if (rx->type == NODE_RX_TYPE_DC_PDU_RELEASE) {
+			if (rx->type == NODE_RX_TYPE_RELEASE) {
 				(void)memq_dequeue(memq_ll_rx.tail,
 						   &memq_ll_rx.head, NULL);
 				mem_release(link, &mem_link_rx.free);
@@ -634,6 +697,9 @@ void ll_rx_dequeue(void)
 	case NODE_RX_TYPE_EXT_1M_REPORT:
 	case NODE_RX_TYPE_EXT_2M_REPORT:
 	case NODE_RX_TYPE_EXT_CODED_REPORT:
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+	case NODE_RX_TYPE_SYNC_REPORT:
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 	{
 		struct node_rx_hdr *rx_curr;
 		struct pdu_adv *adv;
@@ -745,6 +811,15 @@ void ll_rx_dequeue(void)
 					mem_release(rx_free, &mem_pdu_rx.free);
 				}
 			}
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+			if (lll->aux) {
+				struct ll_adv_aux_set *aux;
+
+				aux = (void *)HDR_LLL2EVT(lll->aux);
+				aux->is_started = 0U;
+			}
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 			adv->is_enabled = 0U;
 #else /* !CONFIG_BT_PERIPHERAL */
@@ -967,6 +1042,9 @@ void ll_rx_mem_release(void **node_rx)
 		case NODE_RX_TYPE_EXT_1M_REPORT:
 		case NODE_RX_TYPE_EXT_2M_REPORT:
 		case NODE_RX_TYPE_EXT_CODED_REPORT:
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+		case NODE_RX_TYPE_SYNC_REPORT:
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_OBSERVER */
 
@@ -1861,11 +1939,13 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 #if defined(CONFIG_BT_OBSERVER)
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	case NODE_RX_TYPE_EXT_1M_REPORT:
-	case NODE_RX_TYPE_EXT_2M_REPORT:
 	case NODE_RX_TYPE_EXT_CODED_REPORT:
+	case NODE_RX_TYPE_EXT_AUX_REPORT:
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+	case NODE_RX_TYPE_SYNC_REPORT:
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 	{
 		struct pdu_adv *adv;
-		uint8_t phy = 0U;
 
 		memq_dequeue(memq_ull_rx.tail, &memq_ull_rx.head, NULL);
 
@@ -1876,22 +1956,7 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 			break;
 		}
 
-		switch (rx->type) {
-		case NODE_RX_TYPE_EXT_1M_REPORT:
-			phy = BIT(0);
-			break;
-		case NODE_RX_TYPE_EXT_2M_REPORT:
-			phy = BIT(1);
-			break;
-		case NODE_RX_TYPE_EXT_CODED_REPORT:
-			phy = BIT(2);
-			break;
-		default:
-			LL_ASSERT(0);
-			break;
-		}
-
-		ull_scan_aux_setup(link, rx, phy);
+		ull_scan_aux_setup(link, rx);
 	}
 	break;
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
@@ -1952,6 +2017,8 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 #if defined(CONFIG_BT_CTLR_SCAN_INDICATION)
 	case NODE_RX_TYPE_SCAN_INDICATION:
 #endif /* CONFIG_BT_CTLR_SCAN_INDICATION */
+
+	case NODE_RX_TYPE_RELEASE:
 	{
 		memq_dequeue(memq_ull_rx.tail, &memq_ull_rx.head, NULL);
 		ll_rx_put(link, rx);
