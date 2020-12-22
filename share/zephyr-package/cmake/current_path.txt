@@ -1,0 +1,1 @@
+/Users/john.norair/source/zephyrproject/zephyr/share/zephyr-package/cmake

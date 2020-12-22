@@ -1,0 +1,19 @@
+identifier: nucleo_l010rb
+name: ST Nucleo L010RB
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+  - xtools
+ram: 20
+flash: 128
+supported:
+  - arduino_gpio
+  - arduino_i2c
+  - arduino_spi
+  - gpio
+  - i2c
+  - spi
+  - watchdog
+  - adc

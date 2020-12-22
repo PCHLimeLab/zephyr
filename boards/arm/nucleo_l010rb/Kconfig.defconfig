@@ -1,0 +1,15 @@
+# STM32 Nucleo-64 development board with STM32L010RB MCU
+
+# Copyright (c) 2018 Ilya Tagunov <tagunil@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+if BOARD_NUCLEO_L010RB
+
+config BOARD
+	default "nucleo_l010rb"
+
+config SPI_STM32_INTERRUPT
+	default y
+	depends on SPI
+
+endif # BOARD_NUCLEO_L010RB

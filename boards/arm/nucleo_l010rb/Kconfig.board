@@ -1,0 +1,8 @@
+# STM32 Nucleo-64 development board with STM32L010RB MCU configuration
+
+# Copyright (c) 2018 Ilya Tagunov <tagunil@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_NUCLEO_L010RB
+	bool "NUCLEO-64 L010RB Development Board"
+	depends on SOC_STM32L010XB
