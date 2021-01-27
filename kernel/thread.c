@@ -407,10 +407,6 @@ static void schedule_new_thread(struct k_thread *thread, k_timeout_t delay)
 	if (K_TIMEOUT_EQ(delay, K_NO_WAIT)) {
 		k_thread_start(thread);
 	} else {
-#ifdef CONFIG_LEGACY_TIMEOUT_API
-		delay = _TICK_ALIGN + k_ms_to_ticks_ceil32(delay);
-#endif
-
 		z_add_thread_timeout(thread, delay);
 	}
 #else
@@ -1010,7 +1006,7 @@ int z_vrfy_k_thread_stack_space_get(const struct k_thread *thread,
 
 #ifdef CONFIG_USERSPACE
 static inline k_ticks_t z_vrfy_k_thread_timeout_remaining_ticks(
-						    struct k_thread *t)
+						    const struct k_thread *t)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(t, K_OBJ_THREAD));
 	return z_impl_k_thread_timeout_remaining_ticks(t);
@@ -1018,7 +1014,7 @@ static inline k_ticks_t z_vrfy_k_thread_timeout_remaining_ticks(
 #include <syscalls/k_thread_timeout_remaining_ticks_mrsh.c>
 
 static inline k_ticks_t z_vrfy_k_thread_timeout_expires_ticks(
-						  struct k_thread *t)
+						  const struct k_thread *t)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(t, K_OBJ_THREAD));
 	return z_impl_k_thread_timeout_expires_ticks(t);

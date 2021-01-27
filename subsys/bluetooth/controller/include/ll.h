@@ -147,7 +147,7 @@ uint8_t ll_big_sync_create(uint8_t big_handle, uint16_t sync_handle,
 			   uint8_t encryption, uint8_t *bcode, uint8_t mse,
 			   uint16_t sync_timeout, uint8_t num_bis,
 			   uint8_t *bis);
-uint8_t ll_big_sync_terminate(uint8_t big_handle);
+uint8_t ll_big_sync_terminate(uint8_t big_handle, void **rx);
 #else /* !CONFIG_BT_CTLR_ADV_EXT */
 uint8_t ll_scan_enable(uint8_t enable);
 #endif /* !CONFIG_BT_CTLR_ADV_EXT */
@@ -302,6 +302,9 @@ uint32_t ll_radio_state_is_idle(void);
 uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
 				   uint8_t cte_type, uint8_t cte_count,
 				   uint8_t num_ant_ids, uint8_t *ant_ids);
+
+/* Enables or disables CTE TX for periodic advertising */
+uint8_t ll_df_set_cl_cte_tx_enable(uint8_t adv_handle, uint8_t cte_enable);
 
 /* Provides information about antennae switching and sampling settings */
 uint8_t ll_df_set_conn_cte_tx_params(uint16_t handle, uint8_t cte_types,

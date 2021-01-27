@@ -109,6 +109,8 @@ class Sign(Forceable):
                            are currently supported''')
         group.add_argument('-p', '--tool-path', default=None,
                            help='''path to the tool itself, if needed''')
+        group.add_argument('-D', '--tool-data', default=None,
+                           help='''path to tool data/configuration directory, if needed''')
         group.add_argument('tool_args', nargs='*', metavar='tool_opt',
                            help='extra option(s) to pass to the signing tool')
 
@@ -399,7 +401,6 @@ class RimageSigner(Signer):
 
         log.die('Signing not supported for board ' + board)
 
-
     def sign(self, command, build_dir, bcfg, formats):
         args = command.args
 
@@ -420,7 +421,8 @@ class RimageSigner(Signer):
         board = cache['CACHED_BOARD']
         log.inf('Signing for board ' + board)
         target = self.edt_get_rimage_target(board)
-        log.inf('Signing for SOC target ' + target)
+        conf = target + '.toml'
+        log.inf('Signing for SOC target ' + target + ' using ' + conf)
 
         if not args.quiet:
             log.inf('Signing with tool {}'.format(tool_path))
@@ -428,11 +430,33 @@ class RimageSigner(Signer):
         bootloader = str(b / 'zephyr' / 'bootloader.elf.mod')
         kernel = str(b / 'zephyr' / 'zephyr.elf.mod')
         out_bin = str(b / 'zephyr' / 'zephyr.ri')
+        out_xman = str(b / 'zephyr' / 'zephyr.ri.xman')
+        out_tmp = str(b / 'zephyr' / 'zephyr.rix')
+        conf_path_cmd = []
+        if cache.get('RIMAGE_CONFIG_PATH') and not args.tool_data:
+            rimage_conf = pathlib.Path(cache['RIMAGE_CONFIG_PATH'])
+            conf_path = str(rimage_conf / conf)
+            conf_path_cmd = ['-c', conf_path]
+        elif args.tool_data:
+            conf_dir = pathlib.Path(args.tool_data)
+            conf_path = str(conf_dir / conf)
+            conf_path_cmd = ['-c', conf_path]
+        else:
+            log.die('Configuration not found')
 
         sign_base = ([tool_path] + args.tool_args +
-                     ['-o', out_bin, '-m', target, '-i', '3'] +
+                     ['-o', out_bin] +  conf_path_cmd + ['-i', '3', '-e'] +
                      [bootloader, kernel])
 
         if not args.quiet:
             log.inf(quote_sh_list(sign_base))
         subprocess.check_call(sign_base)
+
+        filenames = [out_xman, out_bin]
+        with open(out_tmp, 'wb') as outfile:
+            for fname in filenames:
+                with open(fname, 'rb') as infile:
+                    outfile.write(infile.read())
+
+        os.remove(out_bin)
+        os.rename(out_tmp, out_bin)

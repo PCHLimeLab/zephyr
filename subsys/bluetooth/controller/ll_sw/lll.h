@@ -17,6 +17,10 @@
 #define EVENT_PIPELINE_MAX 7
 #define EVENT_DONE_MAX 3
 
+#define ADV_INT_UNIT_US  625U
+#define SCAN_INT_UNIT_US 625U
+#define CONN_INT_UNIT_US 1250U
+
 #define HDR_ULL(p)     ((void *)((uint8_t *)(p) + sizeof(struct evt_hdr)))
 #define HDR_ULL2LLL(p) ((struct lll_hdr *)((uint8_t *)(p) + \
 					   sizeof(struct ull_hdr)))
@@ -82,7 +86,7 @@ enum {
 #if defined(CONFIG_BT_CTLR_SYNC_ISO)
 	TICKER_ID_SCAN_SYNC_ISO_BASE,
 	TICKER_ID_SCAN_SYNC_ISO_LAST = ((TICKER_ID_SCAN_SYNC_ISO_BASE) +
-					(CONFIG_BT_CTLR_SCAN_SYNC_ISO_MAX) - 1),
+					(CONFIG_BT_CTLR_SCAN_SYNC_ISO_SET) - 1),
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */

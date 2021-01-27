@@ -133,6 +133,8 @@ typedef void (*bt_att_chan_sent_t)(struct bt_att_chan *chan);
 static bt_att_chan_sent_t chan_cb(struct net_buf *buf);
 static bt_conn_tx_cb_t att_cb(bt_att_chan_sent_t cb);
 
+static void bt_att_disconnected(struct bt_l2cap_chan *chan);
+
 void att_sent(struct bt_conn *conn, void *user_data)
 {
 	struct bt_l2cap_chan *chan = user_data;
@@ -283,6 +285,11 @@ static void bt_att_sent(struct bt_l2cap_chan *ch)
 	}
 
 	atomic_clear_bit(chan->flags, ATT_PENDING_SENT);
+
+	if (!att) {
+		BT_DBG("Ignore sent on detached ATT chan");
+		return;
+	}
 
 	/* Process pending requests first since they require a response they
 	 * can only be processed one at time while if other queues were
@@ -2433,6 +2440,11 @@ static int bt_att_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	BT_DBG("Received ATT chan %p code 0x%02x len %zu", att_chan, hdr->code,
 	       net_buf_frags_len(buf));
 
+	if (!att_chan->att) {
+		BT_DBG("Ignore recv on detached ATT chan");
+		return 0;
+	}
+
 	for (i = 0, handler = NULL; i < ARRAY_SIZE(handlers); i++) {
 		if (hdr->code == handlers[i].op) {
 			handler = &handlers[i];
@@ -2587,8 +2599,6 @@ static void att_timeout(struct k_work *work)
 {
 	struct bt_att_chan *chan = CONTAINER_OF(work, struct bt_att_chan,
 						timeout_work);
-	struct bt_att *att = chan->att;
-	struct bt_l2cap_le_chan *ch = &chan->chan;
 
 	BT_ERR("ATT Timeout");
 
@@ -2600,18 +2610,7 @@ static void att_timeout(struct k_work *work)
 	 * requests, commands, indications or notifications shall be sent to the
 	 * target device on this ATT Bearer.
 	 */
-	att_chan_detach(chan);
-
-	/* Don't notify if there are still channels to be used */
-	if (!sys_slist_is_empty(&att->chans)) {
-		return;
-	}
-
-	att_reset(att);
-
-	/* Consider the channel disconnected */
-	bt_gatt_disconnected(ch->chan.conn);
-	ch->chan.conn = NULL;
+	bt_att_disconnected(&chan->chan.chan);
 }
 
 static struct bt_att_chan *att_get_fixed_chan(struct bt_conn *conn)
@@ -2667,6 +2666,11 @@ static void bt_att_disconnected(struct bt_l2cap_chan *chan)
 
 	BT_DBG("chan %p cid 0x%04x", ch, ch->tx.cid);
 
+	if (!att_chan->att) {
+		BT_DBG("Ignore disconnect on detached ATT chan");
+		return;
+	}
+
 	att_chan_detach(att_chan);
 
 	/* Don't reset if there are still channels to be used */
@@ -2689,6 +2693,11 @@ static void bt_att_encrypt_change(struct bt_l2cap_chan *chan,
 
 	BT_DBG("chan %p conn %p handle %u sec_level 0x%02x status 0x%02x", ch,
 	       conn, conn->handle, conn->sec_level, hci_status);
+
+	if (!att_chan->att) {
+		BT_DBG("Ignore encrypt change on detached ATT chan");
+		return;
+	}
 
 	/*
 	 * If status (HCI status of security procedure) is non-zero, notify
@@ -2731,6 +2740,11 @@ static void bt_att_status(struct bt_l2cap_chan *ch, atomic_t *status)
 	BT_DBG("chan %p status %p", ch, status);
 
 	if (!atomic_test_bit(status, BT_L2CAP_STATUS_OUT)) {
+		return;
+	}
+
+	if (!chan->att) {
+		BT_DBG("Ignore status on detached ATT chan");
 		return;
 	}
 

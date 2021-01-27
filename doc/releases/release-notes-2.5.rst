@@ -54,6 +54,24 @@ API Changes
 * The :c:func:`mqtt_keepalive_time_left` function now returns -1 if keep alive
   messages are disabled by setting ``CONFIG_MQTT_KEEPALIVE`` to 0.
 
+* The ``CONFIG_LEGACY_TIMEOUT_API`` mode has been removed.  All kernel
+  timeout usage must use the new-style k_timeout_t type and not the
+  legacy/deprecated millisecond counts.
+
+* The :c:func:`coap_pending_init` function now accepts an additional ``retries``
+  parameter, allowing to specify the maximum retransmission count of the
+  confirmable message.
+
+* The ``CONFIG_BT_CTLR_CODED_PHY`` is now disabled by default for builds
+  combining both Bluetooth host and controller.
+
+* The :c:func:`coap_packet_append_payload` function will now take a pointer to a
+  constant buffer as the ``payload`` argument instead of a pointer to a writable
+  buffer.
+
+* The :c:func:`coap_packet_init` function will now take a pointer to a constant
+  buffer as the ``token`` argument instead of a pointer to a writable buffer.
+
 Deprecated in this release
 ==========================
 
@@ -61,6 +79,9 @@ Deprecated in this release
 * ARM Musca-A board and SoC support deprecated and planned to be removed in 2.6.0.
 
 * DEVICE_INIT was deprecated in favor of utilizing DEVICE_DEFINE directly.
+
+* DEVICE_AND_API_INIT was deprecated in favor of DEVICE_DT_INST_DEFINE and
+  DEVICE_DEFINE.
 
 Removed APIs in this release
 ============================
@@ -103,11 +124,15 @@ Boards & SoC Support
 
 * Added support for these SoC series:
 
+  * Cypress PSoC-63
+
 * Made these changes in other SoC series:
 
 * Changes for ARC boards:
 
 * Added support for these ARM boards:
+
+  * Cypress CY8CKIT_062_BLE board
 
 * Added support for these SPARC boards:
 
@@ -117,11 +142,17 @@ Boards & SoC Support
 
 * Made these changes in other boards:
 
+  * CY8CKIT_062_WIFI_BT_M0: was renamed to CY8CKIT_062_WIFI_BT.
+  * CY8CKIT_062_WIFI_BT_M4: was moved into CY8CKIT_062_WIFI_BT.
+  * CY8CKIT_062_WIFI_BT: Now M0+/M4 are at same common board.
   * nRF5340 DK: Selected TF-M as the default Secure Processing Element
     (SPE) when building Zephyr for the non-secure domain.
-
+  * SAM4E_XPRO: Added support to SAM-BA ROM bootloader.
+  * SAM4S_XPLAINED: Added support to SAM-BA ROM bootloader.
 
 * Added support for these following shields:
+
+  * Inventek es-WIFI shield
 
 Drivers and Sensors
 *******************
@@ -160,17 +191,29 @@ Drivers and Sensors
 
 * Flash
 
+  * CONFIG_NORDIC_QSPI_NOR_QE_BIT has been removed.  The
+    quad-enable-requirements devicetree property should be used instead.
+
 * GPIO
+
+  * Added Cypress PSoC-6 driver.
+  * Added Atmel SAM4L driver.
 
 * Hardware Info
 
+  * Added Cypress PSoC-6 driver.
+
 * I2C
+
+  * Added Atmel SAM4L TWIM driver.
 
 * I2S
 
 * IEEE 802.15.4
 
 * Interrupt Controller
+
+  * Added Cypress PSoC-6 Cortex-M0+ interrupt multiplexer driver.
 
 * IPM
 
@@ -212,8 +255,12 @@ Drivers and Sensors
 
 * WiFi
 
+  * Added uart bus interface for eswifi driver.
+
 Networking
 **********
+
+  * Added TagoIO IoT Cloud HTTP post sample.
 
 Bluetooth
 *********
@@ -248,6 +295,13 @@ Build and Infrastructure
     documented in :ref:`dt-from-c`. Information on flash partitions has moved
     to :ref:`flash_map_api`.
 
+* West
+
+  * Improve bossac runner. It supports now native ROM bootloader for Atmel
+    MCUs and extended SAM-BA bootloader like Arduino and Adafruit UF2. The
+    devices supported depend on bossac version inside Zephyr SDK or in users
+    path. The recommended Zephyr SDK version is 0.12.0 or newer.
+
 Libraries / Subsystems
 **********************
 
@@ -258,8 +312,21 @@ Libraries / Subsystems
   * MCUmgr
 
     * Added support for flash devices that have non-0xff erase value.
+    * Added optional verification, enabled via
+      :option:`CONFIG_IMG_MGMT_REJECT_DIRECT_XIP_MISMATCHED_SLOT`, of an uploaded
+      Direct-XIP binary, which will reject any binary that is not able to boot
+      from base address of offered upload slot.
 
   * updatehub
+
+    * Added support to Network Manager and interface overlays at UpdateHub
+      sample. Ethernet is the default interface configuration and overlays
+      can be used to change default configuration
+    * Added WIFI overlay
+    * Added MODEM overlay
+    * Added IEEE 802.15.4 overlay [experimental]
+    * Added BLE IPSP overlay as [experimental]
+    * Added OpenThread overlay as [experimental].
 
 * Settings
 
@@ -285,6 +352,12 @@ Libraries / Subsystems
 * Tracing
 
 * Debug
+
+* DFU
+
+ * boot: Reworked using MCUBoot's bootutil_public library which allow to use
+   API implementation already provided by MCUboot codebase and remove
+   zephyr's own implementations.
 
 HALs
 ****
@@ -318,6 +391,14 @@ MCUBoot
     see ``CONFIG_MCUBOOT_CLEANUP_ARM_CORE``.
   * Allow the final data chunk in the image to be unaligned in
     the serial-recovery protocol.
+  * Kconfig: allow xip-revert only for xip-mode.
+  * ext: tinycrypt: update ctr mode to stream.
+  * Use minimal CBPRINTF implementation.
+  * Configure logging to LOG_MINIMAL by default.
+  * boot: cleanup NXP MPU configuration before boot.
+  * Fix nokogiri<=1.11.0.rc4 vulnerability.
+  * bootutil_public library was extracted as code which is common API for
+    MCUboot and the DFU application, see ``CONFIG_MCUBOOT_BOOTUTIL_LIB``
 
 * imgtool
 
@@ -325,6 +406,8 @@ MCUBoot
   * Add possibility to set confirm flag for hex files as well.
   * Usage of --confirm implies --pad.
   * Fixed 'custom_tlvs' argument handling.
+  * Add support for setting fixed ROM address into image header.
+  * Fixed verification with protected TLVs.
 
 
 Trusted-Firmware-M

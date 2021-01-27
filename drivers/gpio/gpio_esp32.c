@@ -271,6 +271,11 @@ static int gpio_esp32_init(const struct device *device)
 	static bool isr_connected;
 
 	data->pinmux = DEVICE_DT_GET(DT_NODELABEL(pinmux));
+	if ((data->pinmux != NULL)
+	    && !device_is_ready(data->pinmux)) {
+		data->pinmux = NULL;
+	}
+
 	if (!data->pinmux) {
 		return -ENOTSUP;
 	}
