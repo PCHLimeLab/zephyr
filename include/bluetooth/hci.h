@@ -803,15 +803,6 @@ struct bt_hci_cp_le_set_random_address {
 	bt_addr_t bdaddr;
 } __packed;
 
-/* LE Advertising Types (LE Advertising Parameters Set)*/
-#define BT_LE_ADV_IND                  (__DEPRECATED_MACRO 0x00)
-#define BT_LE_ADV_DIRECT_IND           (__DEPRECATED_MACRO 0x01)
-#define BT_LE_ADV_SCAN_IND             (__DEPRECATED_MACRO 0x02)
-#define BT_LE_ADV_NONCONN_IND          (__DEPRECATED_MACRO 0x03)
-#define BT_LE_ADV_DIRECT_IND_LOW_DUTY  (__DEPRECATED_MACRO 0x04)
-/* LE Advertising PDU Types. */
-#define BT_LE_ADV_SCAN_RSP             (__DEPRECATED_MACRO 0x04)
-
 #define BT_HCI_ADV_IND                          0x00
 #define BT_HCI_ADV_DIRECT_IND                   0x01
 #define BT_HCI_ADV_SCAN_IND                     0x02
@@ -1474,9 +1465,9 @@ struct bt_hci_cp_le_set_cl_cte_tx_enable {
 #define BT_HCI_LE_CTE_LEN_MIN                  0x2
 #define BT_HCI_LE_CTE_LEN_MAX                  0x14
 
-#define BT_HCI_LE_AOA_CTE                      0x1
-#define BT_HCI_LE_AOD_CTE_1US                  0x2
-#define BT_HCI_LE_AOD_CTE_2US                  0x3
+#define BT_HCI_LE_AOA_CTE                      0x0
+#define BT_HCI_LE_AOD_CTE_1US                  0x1
+#define BT_HCI_LE_AOD_CTE_2US                  0x2
 
 #define BT_HCI_LE_CTE_COUNT_MIN                0x1
 #define BT_HCI_LE_CTE_COUNT_MAX                0x10

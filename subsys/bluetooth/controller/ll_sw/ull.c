@@ -52,6 +52,9 @@
 #include "ull_sync_internal.h"
 #include "ull_sync_iso_internal.h"
 #include "ull_conn_internal.h"
+#include "ull_conn_iso_internal.h"
+#include "ull_central_iso_internal.h"
+#include "ull_peripheral_iso_internal.h"
 #include "ull_df.h"
 
 #if defined(CONFIG_BT_CTLR_USER_EXT)
@@ -262,8 +265,8 @@ static MFIFO_DEFINE(pdu_rx_free, sizeof(void *), PDU_RX_CNT);
 #define BT_CTLR_MAX_CONN        0
 #endif
 
-#if defined(CONFIG_BT_CTLR_SCAN_SYNC_SET)
-#define BT_CTLR_SCAN_SYNC_SET CONFIG_BT_CTLR_SCAN_SYNC_SET
+#if defined(CONFIG_BT_PER_ADV_SYNC_MAX)
+#define BT_CTLR_SCAN_SYNC_SET CONFIG_BT_PER_ADV_SYNC_MAX
 #else
 #define BT_CTLR_SCAN_SYNC_SET 0
 #endif
@@ -323,6 +326,9 @@ static inline void *mark_get(void *m);
 static inline void done_alloc(void);
 static inline void rx_alloc(uint8_t max);
 static void rx_demux(void *param);
+#if defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+static void rx_demux_yield(void);
+#endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
 #if defined(CONFIG_BT_CONN)
 static uint8_t tx_cmplt_get(uint16_t *handle, uint8_t *first, uint8_t last);
 static inline void rx_demux_conn_tx_ack(uint8_t ack_last, uint16_t handle,
@@ -456,12 +462,34 @@ int ll_init(struct k_sem *sem_rx)
 	* CONFIG_BT_CTLR_PERIPHERAL_ISO || CONFIG_BT_CTLR_CENTRAL_ISO
 	*/
 
+#if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO) || \
+	defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	err = ull_conn_iso_init();
+	if (err) {
+		return err;
+	}
+#endif /* CONFIG_BT_CTLR_PERIPHERAL_ISO || CONFIG_BT_CTLR_CENTRAL_ISO */
+
+#if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
+	err = ull_peripheral_iso_init();
+	if (err) {
+		return err;
+	}
+#endif /* CONFIG_BT_CTLR_PERIPHERAL_ISO */
+
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	err = ull_central_iso_init();
+	if (err) {
+		return err;
+	}
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
+
 #if defined(CONFIG_BT_CTLR_ADV_ISO)
 	err = ull_adv_iso_init();
 	if (err) {
 		return err;
 	}
-#endif /* CONFIG_BT_CONN */
+#endif /* CONFIG_BT_CTLR_ADV_ISO */
 
 #if IS_ENABLED(CONFIG_BT_CTLR_DF)
 	err = lll_df_init();
@@ -532,11 +560,27 @@ void ll_reset(void)
 	* CONFIG_BT_CTLR_PERIPHERAL_ISO || CONFIG_BT_CTLR_CENTRAL_ISO
 	*/
 
+#if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO) || \
+	defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	err = ull_conn_iso_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_CTLR_PERIPHERAL_ISO || CONFIG_BT_CTLR_CENTRAL_ISO */
+
+#if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
+	err = ull_peripheral_iso_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_CTLR_PERIPHERAL_ISO */
+
+#if defined(CONFIG_BT_CTLR_CENTRAL_ISO)
+	err = ull_central_iso_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_CTLR_CENTRAL_ISO */
+
 #if defined(CONFIG_BT_CTLR_ADV_ISO)
 	/* Reset periodic sync sets */
 	err = ull_adv_iso_reset();
 	LL_ASSERT(!err);
-#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
+#endif /* CONFIG_BT_CTLR_ADV_ISO */
 
 #if IS_ENABLED(CONFIG_BT_CTLR_DF)
 	err = ull_df_reset();
@@ -1853,7 +1897,7 @@ static void rx_demux(void *param)
 
 #if defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
 			if (!nack) {
-				ull_rx_sched();
+				rx_demux_yield();
 			}
 #else /* !CONFIG_BT_CTLR_LOW_LAT_ULL */
 			if (nack) {
@@ -1873,7 +1917,7 @@ static void rx_demux(void *param)
 						      link, node_tx);
 
 #if defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
-				ull_rx_sched();
+				rx_demux_yield();
 #endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
 
 			}
@@ -1884,6 +1928,36 @@ static void rx_demux(void *param)
 	} while (link);
 #endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
 }
+
+#if defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+static void rx_demux_yield(void)
+{
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, rx_demux};
+	struct node_rx_hdr *rx;
+	memq_link_t *link_peek;
+
+	link_peek = memq_peek(memq_ull_rx.head, memq_ull_rx.tail, (void **)&rx);
+	if (!link_peek) {
+#if defined(CONFIG_BT_CONN)
+		struct node_tx *node_tx;
+		uint8_t ack_last;
+		uint16_t handle;
+
+		link_peek = ull_conn_ack_peek(&ack_last, &handle, &node_tx);
+		if (!link_peek) {
+			return;
+		}
+#else /* !CONFIG_BT_CONN */
+		return;
+#endif /* !CONFIG_BT_CONN */
+	}
+
+	/* Kick the ULL (using the mayfly, tailchain it) */
+	mayfly_enqueue(TICKER_USER_ID_ULL_HIGH, TICKER_USER_ID_ULL_HIGH, 1,
+		       &mfy);
+}
+#endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
 
 #if defined(CONFIG_BT_CONN)
 static uint8_t tx_cmplt_get(uint16_t *handle, uint8_t *first, uint8_t last)

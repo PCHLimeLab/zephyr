@@ -26,7 +26,7 @@ manifest:
   # Please add items below based on alphabetical order
   projects:
     - name: cmsis
-      revision: 421dcf358fa420e9721a8452c647f0d42af8d68c
+      revision: c3bd2094f92d574377f7af2aec147ae181aa5f8e
       path: modules/hal/cmsis
     - name: hal_atmel
       revision: 9f0a699a2f0253dc9688211ef696daa7b8fadb75
@@ -37,15 +37,12 @@ manifest:
     - name: canopennode
       path: modules/lib/canopennode
       revision: 468d350028a975b96563e58344de48281a0ab371
-    - name: ci-tools
-      revision: da9a2df574094f52d87a03f6393928bdc7dce17c
-      path: tools/ci-tools
     - name: civetweb
       revision: e6903b80c09d17cd1a8bb32e40080005558aad29
       path: modules/lib/civetweb
     - name: hal_espressif
       west-commands: west/west-commands.yml
-      revision: 895d99ed0902e8f3ddde7bdeb3a1fe2fa875b005
+      revision: 416ae58cee8e90a4fddaa9c013ab48b180e1d74a
       path: modules/hal/espressif
     - name: fatfs
       revision: 1d1fcc725aa1cb3c32f366e0c53d7490d0fe1109
@@ -57,7 +54,7 @@ manifest:
       revision: f1fa8241f8786198ba41155413243de36ed878a5
       path: modules/hal/infineon
     - name: hal_nordic
-      revision: f0d54d8449acbee49b3cebcef0e3e56640c50277
+      revision: f3434da6446380fcdd426dbe2866af21d0d549b6
       path: modules/hal/nordic
     - name: hal_openisa
       revision: 40d049f69c50b58ea20473bee14cf93f518bf262
@@ -69,7 +66,7 @@ manifest:
       revision: a1ec761014740a08699720298dd37ad4da360840
       path: modules/hal/microchip
     - name: hal_silabs
-      revision: 6bb4a17a2f94a39eba295dd55dbeae6f6c4c9b1b
+      revision: de93f34488f2ab4d6337af0819b377636034fcda
       path: modules/hal/silabs
     - name: hal_st
       revision: b52fdbf4b62439be9fab9bb4bae9690a42d2fb14
@@ -91,10 +88,10 @@ manifest:
       revision: 31acbaa36e9e74ab88ac81e3d21e7f1d00a71136
       path: modules/lib/gui/lvgl
     - name: mbedtls
-      revision: 13cf2e52024a144ecee9f37680681760a85febab
+      revision: 24d84ecff195fb15c889d9046e44e4804d626c67
       path: modules/crypto/mbedtls
     - name: mcuboot
-      revision: 30e0c5a0af21433efc8ea35cabc44bee3f096a62
+      revision: 3fc59410b633a6d83bbb534e43aac43160f9bd32
       path: bootloader/mcuboot
     - name: mcumgr
       revision: 43845e883ff3a6cdaae22e23f3e60b5fcf78c6ba
@@ -112,7 +109,7 @@ manifest:
       revision: 3f545d76a2e6d1db83a470ccdb5bebd1f484e137
       path: modules/lib/loramac-node
     - name: openthread
-      revision: aad6518ee30d3840411b21437d396f0405e947c3
+      revision: 1d668284a0b897bd6d539e7c3ed8009f0028099d
       path: modules/lib/openthread
     - name: segger
       revision: 38c79a447e4a47d413b4e8d34448316a5cece77c
@@ -143,7 +140,7 @@ manifest:
       revision: 7dd56fc100d79cc45c33d43e7401d1803e26f6e7
     - name: trusted-firmware-m
       path: modules/tee/tfm
-      revision: 96340fb6c0b7e31c2070e1f428ca24076d2700a6
+      revision: 69dc29a48b707dfe732a57e05a3291ca71138eec
     - name: tfm-mcuboot # This is used by the trusted-firmware-m module.
       repo-path: mcuboot
       path: modules/tee/tfm-mcuboot

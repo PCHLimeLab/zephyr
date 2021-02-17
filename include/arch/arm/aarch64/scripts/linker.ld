@@ -294,10 +294,10 @@ SECTIONS
 
     /* Define linker symbols */
 
+    MMU_ALIGN;
     _image_ram_end = .;
     _end = .; /* end of image */
     z_mapped_end = .;
-    z_mapped_size = z_mapped_end - z_mapped_start;
 
     __kernel_ram_end = RAM_ADDR + RAM_SIZE;
     __kernel_ram_size = __kernel_ram_end - __kernel_ram_start;

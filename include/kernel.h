@@ -233,10 +233,21 @@ extern void k_thread_foreach_unlocked(
  */
 #define K_INHERIT_PERMS (BIT(3))
 
+/**
+ * @brief Callback item state
+ *
+ * @details
+ * This is a single bit of state reserved for "callback manager"
+ * utilities (p4wq initially) who need to track operations invoked
+ * from within a user-provided callback they have been invoked.
+ * Effectively it serves as a tiny bit of zero-overhead TLS data.
+ */
+#define K_CALLBACK_STATE (BIT(4))
+
 #ifdef CONFIG_X86
 /* x86 Bitmask definitions for threads user options */
 
-#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_SSE)
+#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_X86_SSE)
 /* thread uses SSEx (and also FP) registers */
 #define K_SSE_REGS (BIT(7))
 #endif
@@ -1945,8 +1956,8 @@ static inline void *z_impl_k_queue_peek_tail(struct k_queue *queue)
  * A k_futex is a lightweight mutual exclusion primitive designed
  * to minimize kernel involvement. Uncontended operation relies
  * only on atomic access to shared memory. k_futex are tracked as
- * kernel objects and can live in user memory so any access bypass
- * the kernel object permission management mechanism.
+ * kernel objects and can live in user memory so that any access
+ * bypasses the kernel object permission management mechanism.
  */
 struct k_futex {
 	atomic_t val;
@@ -4303,12 +4314,6 @@ void k_heap_free(struct k_heap *h, void *mem);
 			.init_bytes = (bytes),			\
 		 },						\
 	}
-
-extern int z_mem_pool_alloc(struct k_mem_pool *pool, struct k_mem_block *block,
-			    size_t size, k_timeout_t timeout);
-extern void *z_mem_pool_malloc(struct k_mem_pool *pool, size_t size);
-extern void z_mem_pool_free(struct k_mem_block *block);
-extern void z_mem_pool_free_id(struct k_mem_block_id *id);
 
 /**
  * @}

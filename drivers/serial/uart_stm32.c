@@ -306,48 +306,45 @@ static int uart_stm32_configure(const struct device *dev,
 	const uint32_t flowctrl = uart_stm32_cfg2ll_hwctrl(cfg->flow_ctrl);
 
 	/* Hardware doesn't support mark or space parity */
-	if ((UART_CFG_PARITY_MARK == cfg->parity) ||
-	    (UART_CFG_PARITY_SPACE == cfg->parity)) {
+	if ((cfg->parity == UART_CFG_PARITY_MARK) ||
+	    (cfg->parity == UART_CFG_PARITY_SPACE)) {
 		return -ENOTSUP;
 	}
 
 #if defined(LL_USART_STOPBITS_0_5) && HAS_LPUART_1
 	if (IS_LPUART_INSTANCE(UartInstance) &&
-	    UART_CFG_STOP_BITS_0_5 == cfg->stop_bits) {
+	    (cfg->stop_bits == UART_CFG_STOP_BITS_0_5)) {
 		return -ENOTSUP;
 	}
 #else
-	if (UART_CFG_STOP_BITS_0_5 == cfg->stop_bits) {
+	if (cfg->stop_bits == UART_CFG_STOP_BITS_0_5) {
 		return -ENOTSUP;
 	}
 #endif
 
 #if defined(LL_USART_STOPBITS_1_5) && HAS_LPUART_1
 	if (IS_LPUART_INSTANCE(UartInstance) &&
-	    UART_CFG_STOP_BITS_1_5 == cfg->stop_bits) {
+	    (cfg->stop_bits == UART_CFG_STOP_BITS_1_5)) {
 		return -ENOTSUP;
 	}
 #else
-	if (UART_CFG_STOP_BITS_1_5 == cfg->stop_bits) {
+	if (cfg->stop_bits == UART_CFG_STOP_BITS_1_5) {
 		return -ENOTSUP;
 	}
 #endif
 
 	/* Driver doesn't support 5 or 6 databits and potentially 7 or 9 */
-	if ((UART_CFG_DATA_BITS_5 == cfg->data_bits) ||
-	    (UART_CFG_DATA_BITS_6 == cfg->data_bits)
+	if ((cfg->data_bits == UART_CFG_DATA_BITS_5) ||
+	    (cfg->data_bits == UART_CFG_DATA_BITS_6)
 #ifndef LL_USART_DATAWIDTH_7B
-	    || (UART_CFG_DATA_BITS_7 == cfg->data_bits)
+	    || (cfg->data_bits == UART_CFG_DATA_BITS_7)
 #endif /* LL_USART_DATAWIDTH_7B */
-#ifndef LL_USART_DATAWIDTH_9B
-	    || (UART_CFG_DATA_BITS_9 == cfg->data_bits)
-#endif /* LL_USART_DATAWIDTH_9B */
-		) {
+	    || (cfg->data_bits == UART_CFG_DATA_BITS_9)) {
 		return -ENOTSUP;
 	}
 
 	/* Driver supports only RTS CTS flow control */
-	if (UART_CFG_FLOW_CTRL_NONE != cfg->flow_ctrl) {
+	if (cfg->flow_ctrl != UART_CFG_FLOW_CTRL_NONE) {
 		if (!IS_UART_HWFLOW_INSTANCE(UartInstance) ||
 		    UART_CFG_FLOW_CTRL_RTS_CTS != cfg->flow_ctrl) {
 			return -ENOTSUP;
@@ -473,10 +470,7 @@ static int uart_stm32_err_check(const struct device *dev)
 static inline void __uart_stm32_get_clock(const struct device *dev)
 {
 	struct uart_stm32_data *data = DEV_DATA(dev);
-	const struct device *clk =
-		device_get_binding(STM32_CLOCK_CONTROL_NAME);
-
-	__ASSERT_NO_MSG(clk);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
 	data->clock = clk;
 }
@@ -653,6 +647,9 @@ static inline void async_evt_rx_rdy(struct uart_stm32_data *data)
 		.data.rx.offset = data->dma_rx.offset
 	};
 
+	/* update the current pos for new data */
+	data->dma_rx.offset = data->dma_rx.counter;
+
 	/* send event only for new data */
 	if (event.data.rx.len > 0) {
 		async_user_callback(data, &event);
@@ -750,9 +747,6 @@ static void uart_stm32_dma_rx_flush(const struct device *dev)
 			data->dma_rx.counter = rx_rcv_len;
 
 			async_evt_rx_rdy(data);
-
-			/* update the current pos for new data */
-			data->dma_rx.offset = rx_rcv_len;
 		}
 	}
 }
@@ -952,8 +946,6 @@ void uart_stm32_dma_rx_cb(const struct device *dma_dev, void *user_data,
 	data->dma_rx.counter = data->dma_rx.buffer_length;
 
 	async_evt_rx_rdy(data);
-
-	data->dma_rx.offset = data->dma_rx.counter;
 
 	if (data->rx_next_buffer != NULL) {
 		async_evt_rx_buf_release(data);
