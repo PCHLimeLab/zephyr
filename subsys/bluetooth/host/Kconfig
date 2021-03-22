@@ -91,7 +91,8 @@ config BT_HCI_TX_STACK_SIZE
 	help
 	  Stack size needed for executing bt_send with specified driver.
 	  NOTE: This is an advanced setting and should not be changed unless
-	  absolutely necessary
+	  absolutely necessary.  To change this you must first select
+	  BT_HCI_TX_STACK_SIZE_WITH_PROMPT.
 
 config BT_HCI_TX_STACK_SIZE_WITH_PROMPT
 	bool "Override HCI Tx thread stack size"
@@ -124,6 +125,16 @@ config BT_HCI_RESERVE
 	help
 	  Headroom that the driver needs for sending and receiving buffers. Add a
 	  new 'default' entry for each new driver.
+
+config BT_HCI_ACL_DATA_SIZE
+	int
+	prompt "ACL data buffer size" if !BT_CTLR
+	depends on BT_HCI_RAW
+	range 27 251
+	default BT_CTLR_DATA_LENGTH_MAX if BT_CTLR_DATA_LENGTH
+	default 27
+	help
+	  Maximum ACL data payload in HCI packets, excluding HCI header.
 
 config BT_RECV_IS_RX_THREAD
 	# Hidden option set by the HCI driver to indicate that there's
@@ -429,7 +440,6 @@ config BT_FIXED_PASSKEY
 
 config BT_USE_DEBUG_KEYS
 	bool "Enable Security Manager Debug Mode"
-	depends on BT_TINYCRYPT_ECC
 	help
 	  This option places Security Manager in a Debug Mode. In this mode
 	  predefined Diffie-Hellman private/public key pair is used as described
@@ -753,6 +763,17 @@ config BT_DEBUG_SERVICE
 	  Services.
 
 endif # BT_DEBUG
+
+config BT_LOG_SNIFFER_INFO
+	bool "Bluetooth log information for sniffer"
+	help
+	  This option enables the Bluetooth stack to log information such as
+	  DH private key and LTK keys, which can be used by sniffers to decrypt
+	  the connection without the use of Debug keys.
+
+	  WARNING: This option prints out private security keys such as
+	  the Long Term Key.
+	  Use of this feature in production is strongly discouraged
 
 config BT_TESTING
 	bool "Bluetooth Testing"

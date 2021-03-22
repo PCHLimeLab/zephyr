@@ -14,6 +14,7 @@ config TFM_BOARD
 	default "nxp/lpcxpresso55s69" if BOARD_LPCXPRESSO55S69_CPU0
 	default "mps2/an521" if BOARD_MPS2_AN521
 	default "stm/nucleo_l552ze_q" if BOARD_NUCLEO_L552ZE_Q
+	default "stm/stm32l562e_dk" if BOARD_STM32L562E_DK
 	default "musca_b1" if BOARD_MUSCA_B1
 	default "musca_s1" if BOARD_MUSCA_S1
 	help
@@ -25,6 +26,7 @@ menuconfig BUILD_WITH_TFM
 	depends on TRUSTED_EXECUTION_NONSECURE
 	depends on TFM_BOARD != ""
 	depends on ARM_TRUSTZONE_M
+	select BUILD_OUTPUT_HEX
 	imply INIT_ARCH_HW_AT_BOOT
 	help
 	  When enabled, this option instructs the Zephyr build process to
@@ -205,5 +207,16 @@ config ROM_START_OFFSET
 	  size for BL2.
 
 endif # !TFM_BL2
+
+# Option to instruct flashing a merged binary consisting of BL2 (optionally),
+# TF-M (Secure), and application (Non-Secure).
+config TFM_FLASH_MERGED_BINARY
+	bool
+	help
+		This option instructs west flash to program the
+		combined (merged) binary consisting of the TF-M
+		Secure firmware image, optionally, the BL2 image
+		(if building with TFM_BL2 is enabled), and the
+		Non-Secure application firmware.
 
 endif # BUILD_WITH_TFM

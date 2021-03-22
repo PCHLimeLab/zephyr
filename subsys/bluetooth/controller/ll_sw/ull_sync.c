@@ -20,11 +20,11 @@
 #include "ticker/ticker.h"
 
 #include "pdu.h"
-#include "ll.h"
 
 #include "lll.h"
-#include "lll_vendor.h"
 #include "lll_clock.h"
+#include "lll/lll_vendor.h"
+#include "lll_chan.h"
 #include "lll_scan.h"
 #include "lll_sync.h"
 #include "lll_sync_iso.h"
@@ -35,6 +35,8 @@
 #include "ull_internal.h"
 #include "ull_scan_internal.h"
 #include "ull_sync_internal.h"
+
+#include "ll.h"
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_ull_sync
@@ -152,7 +154,6 @@ uint8_t ll_sync_create(uint8_t options, uint8_t sid, uint8_t adv_addr_type,
 	lll_sync = &sync->lll;
 	lll_sync->skip_prepare = 0U;
 	lll_sync->skip_event = 0U;
-	lll_sync->data_chan_id = 0U;
 	lll_sync->window_widening_prepare_us = 0U;
 	lll_sync->window_widening_event_us = 0U;
 
@@ -375,6 +376,7 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 	}
 
 	memcpy(lll->access_addr, &si->aa, sizeof(lll->access_addr));
+	lll->data_chan_id = lll_chan_id(lll->access_addr);
 	memcpy(lll->crc_init, si->crc_init, sizeof(lll->crc_init));
 	lll->event_counter = si->evt_cntr;
 	lll->phy = aux->lll.phy;
@@ -418,6 +420,8 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 
 	sync_offset_us = ftr->radio_end_us;
 	sync_offset_us += (uint32_t)si->offs * lll->window_size_event_us;
+	/* offs_adjust may be 1 only if sync setup by LL_PERIODIC_SYNC_IND */
+	sync_offset_us += (si->offs_adjust ? OFFS_ADJUST_US : 0U);
 	sync_offset_us -= PKT_AC_US(pdu->len, 0, lll->phy);
 	sync_offset_us -= EVENT_OVERHEAD_START_US;
 	sync_offset_us -= EVENT_JITTER_US;

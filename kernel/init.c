@@ -27,7 +27,6 @@
 #include <string.h>
 #include <sys/dlist.h>
 #include <kernel_internal.h>
-#include <kswap.h>
 #include <drivers/entropy.h>
 #include <logging/log_ctrl.h>
 #include <tracing/tracing.h>
@@ -386,6 +385,9 @@ FUNC_NORETURN void z_cstart(void)
 #if defined(CONFIG_MMU) && defined(CONFIG_USERSPACE)
 	z_kernel_map_fixup();
 #endif
+	/* do any necessary initialization of static devices */
+	z_device_state_init();
+
 	/* perform basic hardware initialization */
 	z_sys_init_run_level(_SYS_INIT_LEVEL_PRE_KERNEL_1);
 	z_sys_init_run_level(_SYS_INIT_LEVEL_PRE_KERNEL_2);

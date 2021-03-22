@@ -7,10 +7,11 @@
 struct pdu_adv *lll_adv_pdu_latest_get(struct lll_adv_pdu *pdu,
 				       uint8_t *is_modified);
 
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 struct pdu_adv *lll_adv_pdu_and_extra_data_latest_get(struct lll_adv_pdu *pdu,
 						      void **extra_data,
 						      uint8_t *is_modified);
+
 #endif /* CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY */
 
 static inline struct pdu_adv *lll_adv_data_latest_get(struct lll_adv *lll,
@@ -25,11 +26,6 @@ static inline struct pdu_adv *lll_adv_scan_rsp_latest_get(struct lll_adv *lll,
 	return lll_adv_pdu_latest_get(&lll->scan_rsp, is_modified);
 }
 
-static inline struct pdu_adv *lll_adv_data_curr_get(struct lll_adv *lll)
-{
-	return (void *)lll->adv_data.pdu[lll->adv_data.first];
-}
-
 static inline struct pdu_adv *lll_adv_scan_rsp_curr_get(struct lll_adv *lll)
 {
 	return (void *)lll->scan_rsp.pdu[lll->scan_rsp.first];
@@ -42,17 +38,12 @@ lll_adv_aux_data_latest_get(struct lll_adv_aux *lll, uint8_t *is_modified)
 	return lll_adv_pdu_latest_get(&lll->data, is_modified);
 }
 
-static inline struct pdu_adv *lll_adv_aux_data_curr_get(struct lll_adv_aux *lll)
-{
-	return (void *)lll->data.pdu[lll->data.first];
-}
-
 #if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
 static inline struct pdu_adv *
 lll_adv_sync_data_latest_get(struct lll_adv_sync *lll, void **extra_data,
 			     uint8_t *is_modified)
 {
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 	return lll_adv_pdu_and_extra_data_latest_get(&lll->data, extra_data,
 						     is_modified);
 #else
@@ -64,7 +55,7 @@ static inline struct pdu_adv *
 lll_adv_sync_data_curr_get(struct lll_adv_sync *lll, void **extra_data)
 {
 	uint8_t first = lll->data.first;
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 	if (extra_data) {
 		*extra_data = lll->data.extra_data[first];
 	}

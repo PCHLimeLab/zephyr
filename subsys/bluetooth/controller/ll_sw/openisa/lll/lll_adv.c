@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Nordic Semiconductor ASA
+ * Copyright (c) 2018-2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -28,7 +28,9 @@
 
 #include "lll.h"
 #include "lll_vendor.h"
+#include "lll_adv_types.h"
 #include "lll_adv.h"
+#include "lll_adv_pdu.h"
 #include "lll_conn.h"
 #include "lll_chan.h"
 #include "lll_filter.h"
@@ -324,10 +326,11 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 
 	DEBUG_RADIO_START_A(1);
 
+#if defined(CONFIG_BT_PERIPHERAL)
 	/* Check if stopped (on connection establishment race between LLL and
 	 * ULL.
 	 */
-	if (lll_is_stop(lll)) {
+	if (lll->conn && lll->conn->initiated) {
 		int err;
 
 		err = lll_clk_off();
@@ -338,6 +341,7 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 		DEBUG_RADIO_START_A(0);
 		return 0;
 	}
+#endif /* CONFIG_BT_PERIPHERAL */
 
 	radio_reset();
 	/* TODO: other Tx Power settings */
@@ -897,7 +901,6 @@ static inline int isr_rx_pdu(struct lll_adv *lll,
 		   lll->conn) {
 		struct node_rx_ftr *ftr;
 		struct node_rx_pdu *rx;
-		int ret;
 
 		if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
 			rx = ull_pdu_rx_alloc_peek(4);
@@ -925,8 +928,7 @@ static inline int isr_rx_pdu(struct lll_adv *lll,
 		}
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
 		/* Stop further LLL radio events */
-		ret = lll_stop(lll);
-		LL_ASSERT(!ret);
+		lll->conn->initiated = 1;
 
 		rx = ull_pdu_rx_alloc();
 

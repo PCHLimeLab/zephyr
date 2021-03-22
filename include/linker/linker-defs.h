@@ -61,7 +61,7 @@
 	SECTION_PROLOGUE(struct_type##_area,,SUBALIGN(subalign)) \
 	{ \
 		Z_LINK_ITERABLE(struct_type); \
-	} GROUP_LINK_IN(ROMABLE_REGION)
+	} GROUP_ROM_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
 /* Define an output section which will set up an iterable area
  * of equally-sized data structures. For use with Z_STRUCT_SECTION_ITERABLE.
@@ -123,8 +123,6 @@
  * link in shell initialization objects for all modules that use shell and
  * their shell commands are automatically initialized by the kernel.
  */
-
-#define APP_SMEM_SECTION() KEEP(*(SORT("data_smem_*")))
 
 #elif defined(_ASMLANGUAGE)
 

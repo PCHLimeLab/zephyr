@@ -22,23 +22,32 @@
 #include <bluetooth/buf.h>
 #include <bluetooth/bluetooth.h>
 
+#include "../host/hci_ecc.h"
+
 #include "util/util.h"
 #include "util/memq.h"
+
 #include "hal/ecb.h"
 #include "hal/ccm.h"
+
 #include "ll_sw/pdu.h"
+
 #include "ll_sw/lll.h"
-#include "lll_adv.h"
-#include "lll_sync_iso.h"
+#include "lll/lll_adv_types.h"
+#include "ll_sw/lll_adv.h"
+#include "lll/lll_adv_pdu.h"
+#include "ll_sw/lll_sync_iso.h"
 #include "ll_sw/lll_scan.h"
 #include "ll_sw/lll_sync.h"
 #include "ll_sw/lll_conn.h"
 #include "ll_sw/lll_conn_iso.h"
+
 #include "ll_sw/ull_adv_types.h"
 #include "ll_sw/ull_scan_types.h"
 #include "ll_sw/ull_sync_types.h"
 #include "ll_sw/ull_conn_types.h"
 #include "ll_sw/ull_conn_iso_types.h"
+
 #include "ll.h"
 #include "ll_feat.h"
 #include "ll_settings.h"
@@ -673,12 +682,28 @@ static void read_supported_commands(struct net_buf *buf, struct net_buf **evt)
 			    BIT(6) | BIT(7);
 	/* LE Remove Adv Set, LE Clear Adv Sets */
 	rp->commands[37] |= BIT(0) | BIT(1);
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
+	/* LE Set PA Params, LE Set PA Data, LE Set PA Enable */
+	rp->commands[37] |= BIT(2) | BIT(3) | BIT(4);
+#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER)
 	/* LE Set Scan Params, LE Set Scan Enable */
 	rp->commands[26] |= BIT(2) | BIT(3);
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	/* LE Set Extended Scan Params, LE Set Extended Scan Enable */
+	rp->commands[37] |= BIT(5) | BIT(6);
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+	/* LE PA Create Sync, LE PA Create Sync Cancel, LE PA Terminate Sync */
+	rp->commands[38] |= BIT(0) | BIT(1) | BIT(2);
+	/* LE Set PA Receive Enable */
+	rp->commands[40] |= BIT(5);
+#endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+
 #endif /* CONFIG_BT_OBSERVER */
 
 #if defined(CONFIG_BT_CONN)
@@ -687,6 +712,11 @@ static void read_supported_commands(struct net_buf *buf, struct net_buf **evt)
 	rp->commands[26] |= BIT(4) | BIT(5);
 	/* Set Host Channel Classification */
 	rp->commands[27] |= BIT(3);
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	/* LE Extended Create Connection */
+	rp->commands[37] |= BIT(7);
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 #if defined(CONFIG_BT_CTLR_LE_ENC)
 	/* LE Start Encryption */
@@ -754,8 +784,7 @@ static void read_supported_commands(struct net_buf *buf, struct net_buf **evt)
 #endif /* CONFIG_BT_CTLR_PRIVACY */
 
 #if defined(CONFIG_BT_HCI_RAW) && defined(CONFIG_BT_TINYCRYPT_ECC)
-	/* LE Read Local P256 Public Key and LE Generate DH Key*/
-	rp->commands[34] |= BIT(1) | BIT(2);
+	bt_hci_ecc_supported_commands(rp->commands);
 #endif /* CONFIG_BT_HCI_RAW && CONFIG_BT_TINYCRYPT_ECC */
 
 	/* LE Read TX Power. */
@@ -2431,8 +2460,8 @@ static void le_read_tx_power(struct net_buf *buf, struct net_buf **evt)
 	ll_tx_pwr_get(&rp->min_tx_power, &rp->max_tx_power);
 }
 
-#if IS_ENABLED(CONFIG_BT_CTLR_DF)
-#if IS_ENABLED(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+#if defined(CONFIG_BT_CTLR_DF)
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 static void le_df_set_cl_cte_tx_params(struct net_buf *buf,
 				       struct net_buf **evt)
 {
@@ -2480,7 +2509,7 @@ static void le_df_set_cl_cte_enable(struct net_buf *buf, struct net_buf **evt)
 }
 #endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
 
-#if IS_ENABLED(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
 static void le_df_set_conn_cte_tx_params(struct net_buf *buf,
 					 struct net_buf **evt)
 {
@@ -3593,8 +3622,8 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 		le_read_tx_power(cmd, evt);
 		break;
 
-#if IS_ENABLED(CONFIG_BT_CTLR_DF)
-#if IS_ENABLED(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+#if defined(CONFIG_BT_CTLR_DF)
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 	case BT_OCF(BT_HCI_OP_LE_SET_CL_CTE_TX_PARAMS):
 		le_df_set_cl_cte_tx_params(cmd, evt);
 		break;
@@ -3605,7 +3634,7 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 	case BT_OCF(BT_HCI_OP_LE_READ_ANT_INFO):
 		le_df_read_ant_inf(cmd, evt);
 		break;
-#if IS_ENABLED(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
 	case BT_OCF(BT_HCI_OP_LE_SET_CONN_CTE_TX_PARAMS):
 		le_df_set_conn_cte_tx_params(cmd, evt);
 		break;
@@ -4682,6 +4711,7 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 		struct pdu_adv_ext_hdr *h;
 		uint8_t sec_phy_curr = 0U;
 		uint8_t evt_type_curr;
+		uint8_t hdr_buf_len;
 		uint8_t hdr_len;
 		uint8_t *ptr;
 
@@ -4706,8 +4736,7 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 		evt_type_curr = p->adv_mode;
 
 		if (!p->ext_hdr_len) {
-			hdr_len = offsetof(struct pdu_adv_com_ext_adv,
-					   ext_hdr_adv_data);
+			hdr_len = PDU_AC_EXT_HEADER_SIZE_MIN;
 
 			goto no_ext_hdr;
 		}
@@ -4797,24 +4826,18 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 		}
 
 		hdr_len = ptr - (uint8_t *)p;
-		if (hdr_len <= (offsetof(struct pdu_adv_com_ext_adv,
-					 ext_hdr_adv_data) +
+		if (hdr_len <= (PDU_AC_EXT_HEADER_SIZE_MIN +
 				sizeof(struct pdu_adv_ext_hdr))) {
-			hdr_len = offsetof(struct pdu_adv_com_ext_adv,
-					   ext_hdr_adv_data);
+			hdr_len = PDU_AC_EXT_HEADER_SIZE_MIN;
 			ptr = (uint8_t *)h;
 		}
 
-		if (hdr_len > (p->ext_hdr_len +
-			       offsetof(struct pdu_adv_com_ext_adv,
-					ext_hdr_adv_data))) {
+		hdr_buf_len = PDU_AC_EXT_HEADER_SIZE_MIN + p->ext_hdr_len;
+		if (hdr_len > hdr_buf_len) {
 			BT_WARN("    Header length %u/%u, INVALID.", hdr_len,
 				p->ext_hdr_len);
 		} else {
-			uint8_t acad_len = p->ext_hdr_len +
-					   offsetof(struct pdu_adv_com_ext_adv,
-						    ext_hdr_adv_data) -
-					   hdr_len;
+			uint8_t acad_len = hdr_buf_len - hdr_len;
 
 			if (acad_len) {
 				ptr += acad_len;
@@ -5103,6 +5126,7 @@ static void le_per_adv_sync_report(struct pdu_data *pdu_data,
 		uint8_t *data_curr = NULL;
 		uint8_t sec_phy_curr = 0U;
 		struct pdu_adv_ext_hdr *h;
+		uint8_t hdr_buf_len;
 		uint8_t hdr_len;
 		uint8_t *ptr;
 
@@ -5166,24 +5190,18 @@ static void le_per_adv_sync_report(struct pdu_data *pdu_data,
 		}
 
 		hdr_len = ptr - (uint8_t *)p;
-		if (hdr_len <= (offsetof(struct pdu_adv_com_ext_adv,
-					 ext_hdr_adv_data) +
+		if (hdr_len <= (PDU_AC_EXT_HEADER_SIZE_MIN +
 				sizeof(struct pdu_adv_ext_hdr))) {
-			hdr_len = offsetof(struct pdu_adv_com_ext_adv,
-					   ext_hdr_adv_data);
+			hdr_len = PDU_AC_EXT_HEADER_SIZE_MIN;
 			ptr = (uint8_t *)h;
 		}
 
-		if (hdr_len > (p->ext_hdr_len +
-			       offsetof(struct pdu_adv_com_ext_adv,
-					ext_hdr_adv_data))) {
+		hdr_buf_len = PDU_AC_EXT_HEADER_SIZE_MIN + p->ext_hdr_len;
+		if (hdr_len > hdr_buf_len) {
 			BT_WARN("    Header length %u/%u, INVALID.", hdr_len,
 				p->ext_hdr_len);
 		} else {
-			uint8_t acad_len = p->ext_hdr_len +
-					   offsetof(struct pdu_adv_com_ext_adv,
-						    ext_hdr_adv_data) -
-					   hdr_len;
+			uint8_t acad_len = hdr_buf_len - hdr_len;
 
 			if (acad_len) {
 				ptr += acad_len;

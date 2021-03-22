@@ -29,19 +29,20 @@
 #include "lll.h"
 #include "lll_vendor.h"
 #include "lll_clock.h"
+#include "lll_adv_types.h"
 #include "lll_adv.h"
+#include "lll_adv_pdu.h"
 #include "lll_adv_aux.h"
 #include "lll_conn.h"
 #include "lll_chan.h"
 #include "lll_filter.h"
+#include "lll_df_types.h"
 
 #include "lll_internal.h"
 #include "lll_tim_internal.h"
 #include "lll_adv_internal.h"
 #include "lll_prof_internal.h"
-#if IS_ENABLED(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 #include "lll_df_internal.h"
-#endif /* CONFIG_BT_CTLR_DF_ADV_CTE_TX */
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_lll_adv
@@ -51,7 +52,7 @@
 static int init_reset(void);
 
 static struct pdu_adv *adv_pdu_allocate(struct lll_adv_pdu *pdu, uint8_t last);
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 static inline void adv_extra_data_release(struct lll_adv_pdu *pdu, int idx);
 static void *adv_extra_data_allocate(struct lll_adv_pdu *pdu, uint8_t last);
 static int adv_extra_data_free(struct lll_adv_pdu *pdu, uint8_t last);
@@ -121,8 +122,8 @@ static MFIFO_DEFINE(pdu_free, sizeof(void *), PDU_MEM_FIFO_COUNT);
 /* Semaphore to wakeup thread waiting for free AD data PDU buffers */
 static struct k_sem sem_pdu_free;
 
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
-#if IS_ENABLED(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 #define EXTRA_DATA_MEM_SIZE MROUND(sizeof(struct lll_df_adv_cfg))
 #else
 #define EXTRA_DATA_MEM_SIZE 0
@@ -220,7 +221,7 @@ int lll_adv_data_reset(struct lll_adv_pdu *pdu)
 	pdu->last = 0U;
 	pdu->pdu[1] = NULL;
 
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 	/* Both slots are NULL because the extra_memory is allocated only
 	 * on request. Not every advertising PDU includes extra_data.
 	 */
@@ -317,7 +318,7 @@ struct pdu_adv *lll_adv_pdu_latest_get(struct lll_adv_pdu *pdu,
 	return (void *)pdu->pdu[first];
 }
 
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 int lll_adv_and_extra_data_init(struct lll_adv_pdu *pdu)
 {
 	struct pdu_adv *p;
@@ -589,7 +590,7 @@ static int init_reset(void)
 	/* Initialize AC PDU free buffer return queue */
 	MFIFO_INIT(pdu_free);
 
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 	/* Initialize extra data pool */
 	mem_init(mem_extra_data.pool, EXTRA_DATA_MEM_SIZE,
 		 (sizeof(mem_extra_data.pool) / EXTRA_DATA_MEM_SIZE), &mem_extra_data.free);
@@ -649,7 +650,7 @@ static struct pdu_adv *adv_pdu_allocate(struct lll_adv_pdu *pdu, uint8_t last)
 	return p;
 }
 
-#if IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
+#if defined(CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY)
 static void *adv_extra_data_allocate(struct lll_adv_pdu *pdu, uint8_t last)
 {
 	void *extra_data;
@@ -739,10 +740,11 @@ static int prepare_cb(struct lll_prepare_param *p)
 
 	lll = p->param;
 
+#if defined(CONFIG_BT_PERIPHERAL)
 	/* Check if stopped (on connection establishment race between LLL and
 	 * ULL.
 	 */
-	if (unlikely(lll_is_stop(lll))) {
+	if (unlikely(lll->conn && lll->conn->initiated)) {
 		int err;
 
 		err = lll_hfclock_off();
@@ -753,6 +755,7 @@ static int prepare_cb(struct lll_prepare_param *p)
 		DEBUG_RADIO_CLOSE_A(0);
 		return 0;
 	}
+#endif /* CONFIG_BT_PERIPHERAL */
 
 	radio_reset();
 
@@ -1333,7 +1336,6 @@ static inline int isr_rx_pdu(struct lll_adv *lll,
 		   lll->conn) {
 		struct node_rx_ftr *ftr;
 		struct node_rx_pdu *rx;
-		int ret;
 
 		if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
 			rx = ull_pdu_rx_alloc_peek(4);
@@ -1362,8 +1364,7 @@ static inline int isr_rx_pdu(struct lll_adv *lll,
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
 
 		/* Stop further LLL radio events */
-		ret = lll_stop(lll);
-		LL_ASSERT(!ret);
+		lll->conn->initiated = 1;
 
 		rx = ull_pdu_rx_alloc();
 
