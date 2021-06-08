@@ -10,7 +10,9 @@
 #include <console/tty.h>
 #include <drivers/uart.h>
 
-static struct tty_serial console_serial;
+///@todo this has been de-static-ized in order to work on Cork
+//static struct tty_serial console_serial;
+struct tty_serial console_serial;
 
 static uint8_t console_rxbuf[CONFIG_CONSOLE_GETCHAR_BUFSIZE];
 static uint8_t console_txbuf[CONFIG_CONSOLE_PUTCHAR_BUFSIZE];
