@@ -33,6 +33,9 @@ extern "C" {
 				  BT_HCI_ISO_HDR_SIZE + \
 				  BT_HCI_ISO_DATA_HDR_SIZE)
 
+/** Value to set the ISO data path over HCi. */
+#define BT_ISO_DATA_PATH_HCI     0x00
+
 struct bt_iso_chan;
 
 /** @brief Life-span states of ISO channel. Used only by internal APIs
@@ -60,31 +63,35 @@ struct bt_iso_chan {
 	struct bt_iso_chan_ops		*ops;
 	/** Channel QoS reference */
 	struct bt_iso_chan_qos		*qos;
-	/** Channel data path reference*/
-	struct bt_iso_chan_path		*path;
 	sys_snode_t			node;
 	uint8_t				state;
 	bt_security_t			required_sec_level;
 };
 
-/** @brief Audio QoS direction */
-enum {
-	BT_ISO_CHAN_QOS_IN,
-	BT_ISO_CHAN_QOS_OUT,
-	BT_ISO_CHAN_QOS_INOUT
+/** @brief ISO Channel IO QoS structure. */
+struct bt_iso_chan_io_qos {
+	/** Channel interval in us. Value range 0x0000FF - 0x0FFFFFF. */
+	uint32_t			interval;
+	/** Channel Latency in ms. Value range 0x0005 - 0x0FA0. */
+	uint16_t			latency;
+	/** Channel SDU. Value range 0x0000 - 0x0FFF. */
+	uint16_t			sdu;
+	/** Channel PHY - See BT_GAP_LE_PHY for values.
+	 *  Setting BT_GAP_LE_PHY_NONE is invalid.
+	 */
+	uint8_t				phy;
+	/** Channel Retransmission Number. Value range 0x00 - 0x0F. */
+	uint8_t				rtn;
+	/** @brief Channel data path reference
+	 *
+	 *  Setting to NULL default to HCI data path (same as setting path.pid
+	 *  to BT_ISO_DATA_PATH_HCI).
+	 */
+	struct bt_iso_chan_path		*path;
 };
 
 /** @brief ISO Channel QoS structure. */
 struct bt_iso_chan_qos {
-	/** @brief Channel direction
-	 *
-	 *  Possible values: BT_ISO_CHAN_QOS_IN, BT_ISO_CHAN_QOS_OUT or
-	 *  BT_ISO_CHAN_QOS_INOUT. Shall be BT_ISO_CHAN_QOS_IN for broadcast
-	 *  transmitting, and BT_ISO_CHAN_QOS_OUT for broadcast receiver.
-	 */
-	uint8_t				dir;
-	/** Channel interval in us. Value range 0x0000FF - 0x0FFFFFF. */
-	uint32_t			interval;
 	/** @brief Channel peripherals sleep clock accuracy Only for CIS
 	 *
 	 * Shall be worst case sleep clock accuracy of all the peripherals.
@@ -95,14 +102,22 @@ struct bt_iso_chan_qos {
 	uint8_t				packing;
 	/** Channel framing mode. 0 for unframed, 1 for framed. */
 	uint8_t				framing;
-	/** Channel Latency in ms. Value range 0x0005 - 0x0FA0. */
-	uint16_t			latency;
-	/** Channel SDU. Value range 0x0000 0 0x0FFF. */
-	uint8_t				sdu;
-	/** Channel PHY - See BT_GAP_LE_PHY for values. Shall not be BT_GAP_LE_PHY_NONE. */
-	uint8_t				phy;
-	/** Channel Retransmission Number. Value range 0x00 - 0x0F. */
-	uint8_t				rtn;
+	/** @brief Channel Receiving QoS.
+	 *
+	 *  Setting NULL disables data path BT_HCI_DATAPATH_DIR_CTLR_TO_HOST.
+	 *
+	 *  Can only be set for a connected isochronous channel, or a broadcast
+	 *  isochronous receiver.
+	 */
+	struct bt_iso_chan_io_qos	*rx;
+	/** @brief Channel Transmission QoS
+	 *
+	 *  Setting NULL disables data path BT_HCI_DATAPATH_DIR_HOST_TO_CTRL.
+	 *
+	 *  Can only be set for a connected isochronous channel, or a broadcast
+	 *  isochronous transmitter.
+	 */
+	struct bt_iso_chan_io_qos	*tx;
 };
 
 /** @brief ISO Channel Data Path structure. */
@@ -123,6 +138,32 @@ struct bt_iso_chan_path {
 	uint8_t				cc[0];
 };
 
+/** ISO packet status flags */
+enum {
+	/** The ISO packet is valid. */
+	BT_ISO_FLAGS_VALID,
+	/** @brief The ISO packet may possibly contain errors.
+	 *
+	 * May be caused by a failed CRC check or if missing a part of the SDU.
+	 */
+	BT_ISO_FLAGS_ERROR,
+	/** The ISO packet was lost. */
+	BT_ISO_FLAGS_LOST
+};
+
+/** @brief ISO Meta Data structure for received ISO packets. */
+struct bt_iso_recv_info {
+	/** ISO timestamp - valid only if the Bluetooth controller includes it
+	 *  If time stamp is not pressent this value will be 0 on all iso packets
+	 */
+	uint32_t ts;
+
+	/** ISO packet sequence number of the first fragment in the SDU */
+	uint16_t sn;
+
+	/** ISO packet flags (BT_ISO_FLAGS_*) */
+	uint8_t flags;
+};
 
 /** Opaque type representing an Broadcast Isochronous Group (BIG). */
 struct bt_iso_big;
@@ -237,9 +278,10 @@ struct bt_iso_chan_ops {
 	 *  channel is disconnected, including when a connection gets
 	 *  rejected.
 	 *
-	 *  @param chan The channel that has been Disconnected
+	 *  @param chan   The channel that has been Disconnected
+	 *  @param reason HCI reason for the disconnection.
 	 */
-	void (*disconnected)(struct bt_iso_chan *chan);
+	void (*disconnected)(struct bt_iso_chan *chan, uint8_t reason);
 
 	/** @brief Channel alloc_buf callback
 	 *
@@ -256,8 +298,13 @@ struct bt_iso_chan_ops {
 	 *
 	 *  @param chan The channel receiving data.
 	 *  @param buf Buffer containing incoming data.
+	 *  @param info Pointer to the metadata for the buffer. The lifetime of the
+	 *              pointer is linked to the lifetime of the net_buf.
+	 *              Metadata such as sequence number and timestamp can be
+	 *              provided by the bluetooth controller.
 	 */
-	void (*recv)(struct bt_iso_chan *chan, struct net_buf *buf);
+	void (*recv)(struct bt_iso_chan *chan, const struct bt_iso_recv_info *info,
+			struct net_buf *buf);
 };
 
 /** @brief ISO Server structure. */
@@ -305,6 +352,20 @@ int bt_iso_server_register(struct bt_iso_server *server);
 int bt_iso_chan_bind(struct bt_conn **conns, uint8_t num_conns,
 		     struct bt_iso_chan **chans);
 
+/** @brief Unbind ISO channel
+ *
+ *  Unbind ISO channel from ACL connection, channel must be in BT_ISO_BOUND
+ *  state.
+ *
+ *  Note: Channels which the ACL connection has been disconnected are unbind
+ *  automatically.
+ *
+ *  @param chan Channel object.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_iso_chan_unbind(struct bt_iso_chan *chan);
+
 /** @brief Connect ISO channels
  *
  *  Connect ISO channels, once the connection is completed each channel
@@ -339,6 +400,9 @@ int bt_iso_chan_disconnect(struct bt_iso_chan *chan);
  *  be queued and sent as and when credits are received from peer.
  *  Regarding to first input parameter, to get details see reference description
  *  to bt_iso_chan_connect() API above.
+ *
+ *  @note Buffer ownership is transferred to the stack in case of success, in
+ *  case of an error the caller retains the ownership of the buffer.
  *
  *  @param chan Channel object.
  *  @param buf Buffer containing data to be sent.

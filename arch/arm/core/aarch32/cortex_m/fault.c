@@ -178,7 +178,7 @@ static bool memory_fault_recoverable(z_arch_esf_t *esf, bool synchronous)
 		uint32_t start = (uint32_t)exceptions[i].start & ~0x1U;
 		uint32_t end = (uint32_t)exceptions[i].end & ~0x1U;
 
-#if defined(CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_DETECTION_DWT)
+#if defined(CONFIG_NULL_POINTER_EXCEPTION_DETECTION_DWT)
 	/* Non-synchronous exceptions (e.g. DebugMonitor) may have
 	 * allowed PC to continue to the next instruction.
 	 */
@@ -243,7 +243,7 @@ static uint32_t mem_manage_fault(z_arch_esf_t *esf, int from_hard_fault,
 		if ((SCB->CFSR & SCB_CFSR_MMARVALID_Msk) != 0) {
 			mmfar = temp;
 			PR_EXC("  MMFAR Address: 0x%x", mmfar);
-			if (from_hard_fault) {
+			if (from_hard_fault != 0) {
 				/* clear SCB_MMAR[VALID] to reset */
 				SCB->CFSR &= ~SCB_CFSR_MMARVALID_Msk;
 			}
@@ -381,7 +381,7 @@ static int bus_fault(z_arch_esf_t *esf, int from_hard_fault, bool *recoverable)
 
 		if ((SCB->CFSR & SCB_CFSR_BFARVALID_Msk) != 0) {
 			PR_EXC("  BFAR Address: 0x%x", bfar);
-			if (from_hard_fault) {
+			if (from_hard_fault != 0) {
 				/* clear SCB_CFSR_BFAR[VALID] to reset */
 				SCB->CFSR &= ~SCB_CFSR_BFARVALID_Msk;
 			}
@@ -397,6 +397,8 @@ static int bus_fault(z_arch_esf_t *esf, int from_hard_fault, bool *recoverable)
 #else
 	} else if (SCB->CFSR & SCB_CFSR_LSPERR_Msk) {
 		PR_FAULT_INFO("  Floating-point lazy state preservation error");
+	} else {
+		;
 	}
 #endif /* !defined(CONFIG_ARMV7_M_ARMV8_M_FP) */
 
@@ -611,7 +613,7 @@ static void debug_monitor(z_arch_esf_t *esf, bool *recoverable)
 	PR_FAULT_INFO(
 		"***** Debug monitor exception *****");
 
-#if defined(CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_DETECTION_DWT)
+#if defined(CONFIG_NULL_POINTER_EXCEPTION_DETECTION_DWT)
 	if (!z_arm_debug_monitor_event_error_check()) {
 		/* By default, all debug monitor exceptions that are not
 		 * treated as errors by z_arm_debug_event_error_check(),
@@ -687,7 +689,11 @@ static uint32_t hard_fault(z_arch_esf_t *esf, bool *recoverable)
 		} else if (SAU->SFSR != 0) {
 			secure_fault(esf);
 #endif /* CONFIG_ARM_SECURE_FIRMWARE */
+		} else {
+			;
 		}
+	} else {
+		;
 	}
 #else
 #error Unknown ARM architecture

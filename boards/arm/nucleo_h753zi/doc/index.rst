@@ -121,6 +121,8 @@ features:
 +-----------+------------+-------------------------------------+
 | SPI       | on-chip    | spi                                 |
 +-----------+------------+-------------------------------------+
+| USB       | on-chip    | usb_device                          |
++-----------+------------+-------------------------------------+
 
 Other hardware features are not yet supported on this Zephyr port.
 
@@ -143,7 +145,7 @@ and a ST morpho connector. Board is configured as follows:
 - I2C : PB8, PB9
 - ADC1_INP15 : PA3
 - ETH : PA1, PA2, PA7, PB13, PC1, PC4, PC5, PG11, PG13
-- SPI1 SCK/MISO/MOSI : PA5/PA6/PB5 (Arduino SPI)
+- SPI1 NSS/SCK/MISO/MOSI : PD14PA5/PA6/PB5 (Arduino SPI)
 
 System Clock
 ------------

@@ -87,7 +87,7 @@ struct bt_att_chan {
 	ATOMIC_DEFINE(flags, ATT_NUM_FLAGS);
 	struct bt_att_req	*req;
 	struct k_fifo		tx_queue;
-	struct k_delayed_work	timeout_work;
+	struct k_work_delayable	timeout_work;
 	void (*sent)(struct bt_att_chan *chan);
 	sys_snode_t		node;
 };
@@ -117,6 +117,7 @@ typedef void (*bt_att_chan_sent_t)(struct bt_att_chan *chan);
 static bt_att_chan_sent_t chan_cb(struct net_buf *buf);
 static bt_conn_tx_cb_t att_cb(bt_att_chan_sent_t cb);
 
+static void att_chan_mtu_updated(struct bt_att_chan *updated_chan);
 static void bt_att_disconnected(struct bt_l2cap_chan *chan);
 
 void att_sent(struct bt_conn *conn, void *user_data)
@@ -130,6 +131,13 @@ void att_sent(struct bt_conn *conn, void *user_data)
 	}
 }
 
+/* In case of success the ownership of the buffer is transferred to the stack
+ * which takes care of releasing it when it completes transmitting to the
+ * controller.
+ *
+ * In case bt_l2cap_send_cb fails the buffer state and ownership are retained
+ * so the buffer can be safely pushed back to the queue to be processed later.
+ */
 static int chan_send(struct bt_att_chan *chan, struct net_buf *buf,
 		     bt_att_chan_sent_t cb)
 {
@@ -193,6 +201,7 @@ static int chan_send(struct bt_att_chan *chan, struct net_buf *buf,
 			       buf, att_cb(chan->sent),
 			       &chan->chan.chan);
 	if (err) {
+		/* In case of an error has occurred restore the buffer state */
 		net_buf_simple_restore(&buf->b, &state);
 	}
 
@@ -316,7 +325,7 @@ static void chan_req_sent(struct bt_att_chan *chan)
 
 	/* Start timeout work */
 	if (chan->req) {
-		k_delayed_work_submit(&chan->timeout_work, BT_ATT_TIMEOUT);
+		k_work_reschedule(&chan->timeout_work, BT_ATT_TIMEOUT);
 	}
 }
 
@@ -436,6 +445,30 @@ static int bt_att_chan_send(struct bt_att_chan *chan, struct net_buf *buf,
 	return chan_send(chan, buf, cb);
 }
 
+static void att_send_process(struct bt_att *att)
+{
+	struct bt_att_chan *chan, *tmp;
+	struct net_buf *buf;
+	int err = -ENOENT;
+
+	buf = net_buf_get(&att->tx_queue, K_NO_WAIT);
+	if (!buf) {
+		return;
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&att->chans, chan, tmp, node) {
+		err = bt_att_chan_send(chan, buf, NULL);
+		if (err >= 0) {
+			break;
+		}
+	}
+
+	if (err < 0) {
+		/* Push it back if it could not be send */
+		k_queue_prepend(&att->tx_queue._queue, buf);
+	}
+}
+
 static void bt_att_chan_send_rsp(struct bt_att_chan *chan, struct net_buf *buf,
 				 bt_att_chan_sent_t cb)
 {
@@ -521,6 +554,9 @@ static uint8_t att_mtu_req(struct bt_att_chan *chan, struct net_buf *buf)
 	chan->chan.tx.mtu = chan->chan.rx.mtu;
 
 	BT_DBG("Negotiated MTU %u", chan->chan.rx.mtu);
+
+	att_chan_mtu_updated(chan);
+
 	return 0;
 }
 
@@ -537,7 +573,7 @@ static int bt_att_chan_req_send(struct bt_att_chan *chan,
 	return chan_req_send(chan, req);
 }
 
-static void att_process(struct bt_att *att)
+static void att_req_send_process(struct bt_att *att)
 {
 	sys_snode_t *node;
 	struct bt_att_chan *chan, *tmp;
@@ -573,7 +609,7 @@ static uint8_t att_handle_rsp(struct bt_att_chan *chan, void *pdu, uint16_t len,
 	       bt_hex(pdu, len));
 
 	/* Cancel timeout if ongoing */
-	k_delayed_work_cancel(&chan->timeout_work);
+	k_work_cancel_delayable(&chan->timeout_work);
 
 	if (!chan->req) {
 		BT_WARN("No pending ATT request");
@@ -597,7 +633,7 @@ static uint8_t att_handle_rsp(struct bt_att_chan *chan, void *pdu, uint16_t len,
 
 process:
 	/* Process pending requests */
-	att_process(chan->att);
+	att_req_send_process(chan->att);
 	if (func) {
 		func(chan->att->conn, err, pdu, len, params);
 	}
@@ -632,6 +668,8 @@ static uint8_t att_mtu_rsp(struct bt_att_chan *chan, struct net_buf *buf)
 	chan->chan.tx.mtu = chan->chan.rx.mtu;
 
 	BT_DBG("Negotiated MTU %u", chan->chan.rx.mtu);
+
+	att_chan_mtu_updated(chan);
 
 	return att_handle_rsp(chan, rsp, buf->len, 0);
 }
@@ -1300,6 +1338,10 @@ static uint8_t att_read_mult_req(struct bt_att_chan *chan, struct net_buf *buf)
 	struct read_data data;
 	uint16_t handle;
 
+	if (!bt_gatt_change_aware(conn, true)) {
+		return BT_ATT_ERR_DB_OUT_OF_SYNC;
+	}
+
 	(void)memset(&data, 0, sizeof(data));
 
 	data.buf = bt_att_create_pdu(conn, BT_ATT_OP_READ_MULT_RSP, 0);
@@ -1389,6 +1431,10 @@ static uint8_t att_read_mult_vl_req(struct bt_att_chan *chan, struct net_buf *bu
 	struct bt_conn *conn = chan->chan.chan.conn;
 	struct read_data data;
 	uint16_t handle;
+
+	if (!bt_gatt_change_aware(conn, true)) {
+		return BT_ATT_ERR_DB_OUT_OF_SYNC;
+	}
 
 	(void)memset(&data, 0, sizeof(data));
 
@@ -2585,7 +2631,9 @@ static void bt_att_connected(struct bt_l2cap_chan *chan)
 		ch->rx.mtu = BT_ATT_DEFAULT_LE_MTU;
 	}
 
-	k_delayed_work_init(&att_chan->timeout_work, att_timeout);
+	att_chan_mtu_updated(att_chan);
+
+	k_work_init_delayable(&att_chan->timeout_work, att_timeout);
 }
 
 static void bt_att_disconnected(struct bt_l2cap_chan *chan)
@@ -2921,6 +2969,30 @@ uint16_t bt_att_get_mtu(struct bt_conn *conn)
 	return mtu;
 }
 
+static void att_chan_mtu_updated(struct bt_att_chan *updated_chan)
+{
+	struct bt_att *att = updated_chan->att;
+	struct bt_att_chan *chan, *tmp;
+	uint16_t max_tx = 0, max_rx = 0;
+
+	/* Get maximum MTU's of other channels */
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&att->chans, chan, tmp, node) {
+		if (chan == updated_chan) {
+			continue;
+		}
+		max_tx = MAX(max_tx, chan->chan.tx.mtu);
+		max_rx = MAX(max_rx, chan->chan.rx.mtu);
+	}
+
+	/* If either maximum MTU has changed */
+	if ((updated_chan->chan.tx.mtu > max_tx) ||
+	    (updated_chan->chan.rx.mtu > max_rx)) {
+		max_tx = MAX(max_tx, updated_chan->chan.tx.mtu);
+		max_rx = MAX(max_rx, updated_chan->chan.rx.mtu);
+		bt_gatt_att_max_mtu_changed(att->conn, max_tx, max_rx);
+	}
+}
+
 struct bt_att_req *bt_att_req_alloc(k_timeout_t timeout)
 {
 	struct bt_att_req *req = NULL;
@@ -2953,9 +3025,7 @@ void bt_att_req_free(struct bt_att_req *req)
 int bt_att_send(struct bt_conn *conn, struct net_buf *buf, bt_conn_tx_cb_t cb,
 		void *user_data)
 {
-	struct bt_att_chan *chan, *tmp;
 	struct bt_att *att;
-	int ret;
 
 	__ASSERT_NO_MSG(conn);
 	__ASSERT_NO_MSG(buf);
@@ -2974,20 +3044,8 @@ int bt_att_send(struct bt_conn *conn, struct net_buf *buf, bt_conn_tx_cb_t cb,
 					user_data);
 	}
 
-	ret = 0;
-
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&att->chans, chan, tmp, node) {
-		ret = bt_att_chan_send(chan, buf, NULL);
-		if (ret >= 0) {
-			break;
-		}
-	}
-
-	if (ret < 0) {
-		/* Queue buffer to be send later */
-		BT_DBG("Queueing buffer %p", buf);
-		net_buf_put(&att->tx_queue, buf);
-	}
+	net_buf_put(&att->tx_queue, buf);
+	att_send_process(att);
 
 	return 0;
 }
@@ -2995,7 +3053,6 @@ int bt_att_send(struct bt_conn *conn, struct net_buf *buf, bt_conn_tx_cb_t cb,
 int bt_att_req_send(struct bt_conn *conn, struct bt_att_req *req)
 {
 	struct bt_att *att;
-	struct bt_att_chan *chan, *tmp;
 
 	BT_DBG("conn %p req %p", conn, req);
 
@@ -3007,22 +3064,8 @@ int bt_att_req_send(struct bt_conn *conn, struct bt_att_req *req)
 		return -ENOTCONN;
 	}
 
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&att->chans, chan, tmp, node) {
-		/* If there is nothing pending use the channel */
-		if (!chan->req) {
-			int ret;
-
-			ret = bt_att_chan_req_send(chan, req);
-			if (ret >= 0) {
-				return ret;
-			}
-		}
-	}
-
-	/* Queue the request to be send later */
 	sys_slist_append(&att->reqs, &req->node);
-
-	BT_DBG("req %p queued", req);
+	att_req_send_process(att);
 
 	return 0;
 }

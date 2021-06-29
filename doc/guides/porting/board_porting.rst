@@ -55,7 +55,7 @@ not always used.
      - NXP Kinetis
      - Arm Cortex-M4
      - Arm
-   * - :ref:`stm32h474i_disco <stm32h747i_disco_board>`
+   * - :ref:`stm32h747i_disco <stm32h747i_disco_board>`
      - STM32H747XI
      - STM32H7
      - STMicro STM32
@@ -173,7 +173,6 @@ The optional files are:
      if(CONFIG_PINMUX)
        zephyr_library()
        zephyr_library_sources(pinmux.c)
-       zephyr_library_include_directories(${ZEPHYR_BASE}/drivers)
      endif()
 
 - :file:`doc/index.rst`, :file:`doc/plank.png`: documentation for and a picture
@@ -193,7 +192,7 @@ your board's name). If you're new to devicetree, see :ref:`devicetree-intro`.
 
 In general, :file:`plank.dts` should look like this:
 
-.. code-block:: none
+.. code-block:: devicetree
 
    /dts-v1/;
    #include <your_soc_vendor/your_soc.dtsi>
@@ -274,7 +273,7 @@ generic across K6X-based boards, it leaves many devices disabled by default
 using ``status`` properties.  For example, there is a CAN controller defined as
 follows (with unimportant parts skipped):
 
-.. code-block:: DTS
+.. code-block:: devicetree
 
    can0: can@40024000 {
 	...
@@ -290,7 +289,7 @@ such as adding nodes for on-board sensors, LEDs, buttons, etc.
 For example, FRDM-K64 (but not Hexiwear K64) :file:`.dts` enables the CAN
 controller and sets the bus speed:
 
-.. code-block:: DTS
+.. code-block:: devicetree
 
    &can0 {
 	status = "okay";

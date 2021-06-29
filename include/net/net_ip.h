@@ -62,6 +62,8 @@ extern "C" {
 enum net_ip_protocol {
 	IPPROTO_IP = 0,            /**< IP protocol (pseudo-val for setsockopt() */
 	IPPROTO_ICMP = 1,          /**< ICMP protocol   */
+	IPPROTO_IGMP = 2,          /**< IGMP protocol   */
+	IPPROTO_IPIP = 4,          /**< IPIP tunnels    */
 	IPPROTO_TCP = 6,           /**< TCP protocol    */
 	IPPROTO_UDP = 17,          /**< UDP protocol    */
 	IPPROTO_IPV6 = 41,         /**< IPv6 protocol   */
@@ -413,6 +415,8 @@ enum net_priority {
 	NET_PRIORITY_IC = 6, /**< Internetwork control               */
 	NET_PRIORITY_NC = 7  /**< Network control                    */
 } __packed;
+
+#define NET_MAX_PRIORITIES 8 /* How many priority values there are */
 
 /** IPv6/IPv4 network connection tuple */
 struct net_tuple {

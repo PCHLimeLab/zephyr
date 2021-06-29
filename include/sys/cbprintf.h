@@ -16,19 +16,18 @@
 #include <stdio.h>
 #endif /* CONFIG_CBPRINTF_LIBC_SUBSTS */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Determine if _Generic is supported.
  * In general it's a C11 feature but it was added also in:
  * - GCC 4.9.0 https://gcc.gnu.org/gcc-4.9/changes.html
  * - Clang 3.0 https://releases.llvm.org/3.0/docs/ClangReleaseNotes.html
+ *
+ * @note Z_C_GENERIC is also set for C++ where functionality is implemented
+ * using overloading and templates.
  */
 #ifndef Z_C_GENERIC
-#if ((__STDC_VERSION__ >= 201112L) || \
+#if defined(__cplusplus) || (((__STDC_VERSION__ >= 201112L) || \
 	((__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__) >= 40900) || \
-	((__clang_major__ * 10000 + __clang_minor__ * 100 + __clang_patchlevel__) >= 30000))
+	((__clang_major__ * 10000 + __clang_minor__ * 100 + __clang_patchlevel__) >= 30000)))
 #define Z_C_GENERIC 1
 #else
 #define Z_C_GENERIC 0
@@ -38,6 +37,10 @@ extern "C" {
 /* Z_C_GENERIC is used there */
 #include <sys/cbprintf_internal.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @defgroup cbprintf_apis Formatted Output APIs
  * @ingroup support_apis
@@ -45,9 +48,20 @@ extern "C" {
  */
 
 /** @brief Required alignment of the buffer used for packaging. */
+#ifdef __xtensa__
+#define CBPRINTF_PACKAGE_ALIGNMENT 16
+#elif defined(CONFIG_X86) && !defined(CONFIG_64BIT)
+/* sizeof(long double) is 12 on x86-32, which is not power of 2.
+ * So set it manually.
+ */
+#define CBPRINTF_PACKAGE_ALIGNMENT \
+	(IS_ENABLED(CONFIG_CBPRINTF_PACKAGE_LONGDOUBLE) ? \
+		16 : MAX(sizeof(double), sizeof(long long)))
+#else
 #define CBPRINTF_PACKAGE_ALIGNMENT \
 	(IS_ENABLED(CONFIG_CBPRINTF_PACKAGE_LONGDOUBLE) ? \
 		sizeof(long double) : MAX(sizeof(double), sizeof(long long)))
+#endif
 
 /** @brief Signature for a cbprintf callback function.
  *
@@ -107,10 +121,17 @@ typedef int (*cbprintf_cb)(/* int c, void *ctx */);
  * store the packed information. If input buffer was too small it is set to
  * -ENOSPC.
  *
+ * @param align_offset input buffer alignment offset in bytes. Where offset 0
+ * means that buffer is aligned to CBPRINTF_PACKAGE_ALIGNMENT. Xtensa requires
+ * that @p packaged is aligned to CBPRINTF_PACKAGE_ALIGNMENT so it must be
+ * multiply of CBPRINTF_PACKAGE_ALIGNMENT or 0.
+ *
  * @param ... formatted string with arguments. Format string must be constant.
  */
-#define CBPRINTF_STATIC_PACKAGE(packaged, inlen, outlen, ... /* fmt, ... */) \
-		Z_CBPRINTF_STATIC_PACKAGE(packaged, inlen, outlen, __VA_ARGS__)
+#define CBPRINTF_STATIC_PACKAGE(packaged, inlen, outlen, align_offset, \
+				... /* fmt, ... */) \
+	Z_CBPRINTF_STATIC_PACKAGE(packaged, inlen, outlen, \
+				  align_offset, __VA_ARGS__)
 
 /** @brief Capture state required to output formatted data later.
  *
@@ -126,11 +147,16 @@ typedef int (*cbprintf_cb)(/* int c, void *ctx */);
  * @param packaged pointer to where the packaged data can be stored.  Pass a
  * null pointer to store nothing but still calculate the total space required.
  * The data stored here is relocatable, that is it can be moved to another
- * contiguous block of memory. The pointer must be aligned to a multiple of
- * the largest element in the argument list.
+ * contiguous block of memory. However, under condition that alignment is
+ * maintained. It must be aligned to at least the size of a pointer.
  *
- * @param len this must be set to the number of bytes available at @p packaged.
- * Ignored if @p packaged is NULL.
+ * @param len this must be set to the number of bytes available at @p packaged
+ * if it is not null. If @p packaged is null then it indicates hypothetical
+ * buffer alignment offset in bytes compared to CBPRINTF_PACKAGE_ALIGNMENT
+ * alignment. Buffer alignment offset impacts returned size of the package.
+ * Xtensa requires that buffer is always aligned to CBPRINTF_PACKAGE_ALIGNMENT
+ * so it must be multiply of CBPRINTF_PACKAGE_ALIGNMENT or 0 when @p packaged is
+ * null.
  *
  * @param format a standard ISO C format string with characters and conversion
  * specifications.
@@ -220,7 +246,7 @@ int cbpprintf(cbprintf_cb out,
  * the functionality is enabled.
  *
  * @note The functionality of this function is significantly reduced
- * when @option{CONFIG_CBPRINTF_NANO} is selected.
+ * when @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param out the function used to emit each generated character.
  *
@@ -246,10 +272,10 @@ int cbprintf(cbprintf_cb out, void *ctx, const char *format, ...);
  * temporary buffer.
  *
  * @note This function is available only when
- * @option{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
+ * @kconfig{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
  *
  * @note The functionality of this function is significantly reduced when
- * @option{CONFIG_CBPRINTF_NANO} is selected.
+ * @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param out the function used to emit each generated character.
  *
@@ -270,10 +296,10 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *format, va_list ap);
 /** @brief fprintf using Zephyrs cbprintf infrastructure.
  *
  * @note This function is available only when
- * @option{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
+ * @kconfig{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
  *
  * @note The functionality of this function is significantly reduced
- * when @option{CONFIG_CBPRINTF_NANO} is selected.
+ * when @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param stream the stream to which the output should be written.
  *
@@ -291,10 +317,10 @@ int fprintfcb(FILE * stream, const char *format, ...);
 /** @brief vfprintf using Zephyrs cbprintf infrastructure.
  *
  * @note This function is available only when
- * @option{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
+ * @kconfig{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
  *
  * @note The functionality of this function is significantly reduced when
- * @option{CONFIG_CBPRINTF_NANO} is selected.
+ * @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param stream the stream to which the output should be written.
  *
@@ -310,10 +336,10 @@ int vfprintfcb(FILE *stream, const char *format, va_list ap);
 /** @brief printf using Zephyrs cbprintf infrastructure.
  *
  * @note This function is available only when
- * @option{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
+ * @kconfig{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
  *
  * @note The functionality of this function is significantly reduced
- * when @option{CONFIG_CBPRINTF_NANO} is selected.
+ * when @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param format a standard ISO C format string with characters and
  * conversion specifications.
@@ -329,10 +355,10 @@ int printfcb(const char *format, ...);
 /** @brief vprintf using Zephyrs cbprintf infrastructure.
  *
  * @note This function is available only when
- * @option{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
+ * @kconfig{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
  *
  * @note The functionality of this function is significantly reduced when
- * @option{CONFIG_CBPRINTF_NANO} is selected.
+ * @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param format a standard ISO C format string with characters and conversion
  * specifications.
@@ -346,10 +372,10 @@ int vprintfcb(const char *format, va_list ap);
 /** @brief snprintf using Zephyrs cbprintf infrastructure.
  *
  * @note This function is available only when
- * @option{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
+ * @kconfig{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
  *
  * @note The functionality of this function is significantly reduced
- * when @option{CONFIG_CBPRINTF_NANO} is selected.
+ * when @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param str where the formatted content should be written
  *
@@ -372,10 +398,10 @@ int snprintfcb(char *str, size_t size, const char *format, ...);
 /** @brief vsnprintf using Zephyrs cbprintf infrastructure.
  *
  * @note This function is available only when
- * @option{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
+ * @kconfig{CONFIG_CBPRINTF_LIBC_SUBSTS} is selected.
  *
  * @note The functionality of this function is significantly reduced when
- * @option{CONFIG_CBPRINTF_NANO} is selected.
+ * @kconfig{CONFIG_CBPRINTF_NANO} is selected.
  *
  * @param str where the formatted content should be written
  *

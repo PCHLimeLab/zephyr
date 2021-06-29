@@ -135,18 +135,22 @@ int icm42605_tap_fetch(const struct device *dev)
 			if (drv_data->fifo_data[0] & APEX_TAP) {
 				if (drv_data->tap_trigger.type ==
 				    SENSOR_TRIG_TAP) {
-					LOG_DBG("Single Tap detected");
-					drv_data->tap_handler(dev
-					      , &drv_data->tap_trigger);
+					if (drv_data->tap_handler) {
+						LOG_DBG("Single Tap detected");
+						drv_data->tap_handler(dev
+						      , &drv_data->tap_trigger);
+					}
 				} else {
 					LOG_ERR("Trigger type is mismatched");
 				}
 			} else if (drv_data->fifo_data[0] & APEX_DOUBLE_TAP) {
 				if (drv_data->double_tap_trigger.type ==
 				    SENSOR_TRIG_DOUBLE_TAP) {
-					LOG_DBG("Double Tap detected");
-					drv_data->double_tap_handler(dev
+					if (drv_data->double_tap_handler) {
+						LOG_DBG("Double Tap detected");
+						drv_data->double_tap_handler(dev
 						     , &drv_data->tap_trigger);
+					}
 				} else {
 					LOG_ERR("Trigger type is mismatched");
 				}
@@ -417,10 +421,12 @@ static int icm42605_init(const struct device *dev)
 	drv_data->accel_sensitivity_shift = 14 - 3;
 	drv_data->gyro_sensitivity_x10 = icm42605_gyro_sensitivity_x10[3];
 
+#ifdef CONFIG_ICM42605_TRIGGER
 	if (icm42605_init_interrupt(dev) < 0) {
 		LOG_ERR("Failed to initialize interrupts.");
 		return -EIO;
 	}
+#endif
 
 	LOG_DBG("Initialize interrupt done");
 
@@ -428,7 +434,9 @@ static int icm42605_init(const struct device *dev)
 }
 
 static const struct sensor_driver_api icm42605_driver_api = {
+#ifdef CONFIG_ICM42605_TRIGGER
 	.trigger_set = icm42605_trigger_set,
+#endif
 	.sample_fetch = icm42605_sample_fetch,
 	.channel_get = icm42605_channel_get,
 	.attr_set = icm42605_attr_set,
@@ -457,7 +465,7 @@ static const struct sensor_driver_api icm42605_driver_api = {
 	ICM42605_DEFINE_CONFIG(index);					\
 	static struct icm42605_data icm42605_driver_##index;		\
 	DEVICE_DT_INST_DEFINE(index, icm42605_init,			\
-			    device_pm_control_nop,			\
+			    NULL,					\
 			    &icm42605_driver_##index,			\
 			    &icm42605_cfg_##index, POST_KERNEL,		\
 			    CONFIG_SENSOR_INIT_PRIORITY,		\

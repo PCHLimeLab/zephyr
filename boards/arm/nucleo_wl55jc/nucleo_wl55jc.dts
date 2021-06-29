@@ -61,6 +61,28 @@
 	};
 };
 
+&clk_hsi {
+	status = "okay";
+};
+
+&pll {
+	div-m = <1>;
+	mul-n = <6>;
+	div-r = <2>;
+	clocks = <&clk_hsi>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(48)>;
+	cpu1-prescaler = <1>;
+	cpu2-prescaler = <1>;
+	ahb3-prescaler = <1>;
+	apb1-prescaler = <1>;
+	apb2-prescaler = <1>;
+};
+
 &lpuart1 {
 	pinctrl-0 = <&lpuart1_tx_pa2 &lpuart1_rx_pa3>;
 	current-speed = <115200>;
@@ -89,10 +111,13 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		/* Set 2Kb of storage at the end of the 256Kb of flash */
-		storage_partition: partition@3f800 {
+		/*
+		 * Set 16kB of storage (8x2kB pages) at the end of the 256kB of
+		 * flash.
+		 */
+		storage_partition: partition@3c000 {
 			label = "storage";
-			reg = <0x0003f800 0x00000800>;
+			reg = <0x0003c000 0x00004000>;
 		};
 	};
 };

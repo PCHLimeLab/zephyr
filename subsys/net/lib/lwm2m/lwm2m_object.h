@@ -198,6 +198,13 @@ struct lwm2m_engine_obj {
 	uint16_t field_count;
 	uint16_t instance_count;
 	uint16_t max_instance_count;
+
+	/* Object version information. */
+	uint8_t version_major;
+	uint8_t version_minor;
+
+	/* Object is a core object (defined in the official LwM2M spec.) */
+	bool is_core : 1;
 };
 
 /* Resource instances with this value are considered "not created" yet */
@@ -407,6 +414,7 @@ struct lwm2m_block_context {
 	uint8_t token[8];
 	uint8_t tkl;
 	bool last_block : 1;
+	uint16_t res_id;
 };
 
 struct lwm2m_output_context {
@@ -436,6 +444,8 @@ typedef void (*lwm2m_message_timeout_cb_t)(struct lwm2m_message *msg);
 
 /* Internal LwM2M message structure to track in-flight messages. */
 struct lwm2m_message {
+	sys_snode_t node;
+
 	/** LwM2M context related to this message */
 	struct lwm2m_ctx *ctx;
 
@@ -467,9 +477,6 @@ struct lwm2m_message {
 
 	/** Incoming message action */
 	uint8_t operation;
-
-	/** Counter for message re-send / abort handling */
-	uint8_t send_attempts;
 
 	/* Information whether the message was acknowledged. */
 	bool acknowledged : 1;

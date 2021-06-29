@@ -5,9 +5,11 @@
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig/include/generated)
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig/include/config)
 
-# Support multiple SOC_ROOT
+# Support multiple SOC_ROOT, remove ZEPHYR_BASE as that is always sourced.
+set(kconfig_soc_root ${SOC_ROOT})
+list(REMOVE_ITEM kconfig_soc_root ${ZEPHYR_BASE})
 set(OPERATION WRITE)
-foreach(root ${SOC_ROOT})
+foreach(root ${kconfig_soc_root})
   file(${OPERATION} ${KCONFIG_BINARY_DIR}/Kconfig.soc.defconfig
        "osource \"${root}/soc/$(ARCH)/*/Kconfig.defconfig\"\n"
   )
@@ -21,9 +23,11 @@ foreach(root ${SOC_ROOT})
   set(OPERATION APPEND)
 endforeach()
 
-# Support multiple shields in BOARD_ROOT
+# Support multiple shields in BOARD_ROOT, remove ZEPHYR_BASE as that is always sourced.
+set(kconfig_board_root ${BOARD_ROOT})
+list(REMOVE_ITEM kconfig_board_root ${ZEPHYR_BASE})
 set(OPERATION WRITE)
-foreach(root ${BOARD_ROOT})
+foreach(root ${kconfig_board_root})
   file(${OPERATION} ${KCONFIG_BINARY_DIR}/Kconfig.shield.defconfig
        "osource \"${root}/boards/shields/*/Kconfig.defconfig\"\n"
   )
@@ -138,7 +142,6 @@ foreach(kconfig_target
     ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT}
     ${COMMON_KCONFIG_ENV_SETTINGS}
     "SHIELD_AS_LIST=${SHIELD_AS_LIST_ESCAPED}"
-    EXTRA_DTC_FLAGS=${EXTRA_DTC_FLAGS}
     DTS_POST_CPP=${DTS_POST_CPP}
     DTS_ROOT_BINDINGS=${DTS_ROOT_BINDINGS}
     ${PYTHON_EXECUTABLE}

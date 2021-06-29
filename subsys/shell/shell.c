@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <sys/atomic.h>
 #include <shell/shell.h>
+#if defined(CONFIG_SHELL_BACKEND_DUMMY)
 #include <shell/shell_dummy.h>
+#endif
 #include "shell_ops.h"
 #include "shell_help.h"
 #include "shell_utils.h"
@@ -105,8 +107,9 @@ static inline enum shell_state state_get(const struct shell *shell)
 static inline const struct shell_static_entry *
 selected_cmd_get(const struct shell *shell)
 {
-	if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT)) {
-	       return shell->ctx->selected_cmd;
+	if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT)
+	    || (CONFIG_SHELL_CMD_ROOT[0] != 0)) {
+		return shell->ctx->selected_cmd;
 	}
 
 	return NULL;
@@ -265,7 +268,8 @@ static bool tab_prepare(const struct shell *shell,
 	/* terminate arguments with NULL */
 	(*argv)[*argc] = NULL;
 
-	if (IS_ENABLED(CONFIG_SHELL_CMDS_SELECT) && (*argc > 0) &&
+	if ((IS_ENABLED(CONFIG_SHELL_CMDS_SELECT) || (CONFIG_SHELL_CMD_ROOT[0] != 0))
+	    && (*argc > 0) &&
 	    (strcmp("select", (*argv)[0]) == 0) &&
 	    !z_shell_in_select_mode(shell)) {
 		*argv = *argv + 1;
@@ -825,7 +829,11 @@ static void alt_metakeys_handle(const struct shell *shell, char data)
 			z_shell_cmd_line_erase(shell);
 			z_shell_fprintf(shell, SHELL_WARNING,
 					"Restored default root commands\n");
-			shell->ctx->selected_cmd = NULL;
+			if (CONFIG_SHELL_CMD_ROOT[0]) {
+				shell->ctx->selected_cmd = root_cmd_find(CONFIG_SHELL_CMD_ROOT);
+			} else {
+				shell->ctx->selected_cmd = NULL;
+			}
 			z_shell_print_prompt_and_cmd(shell);
 		}
 	}
@@ -1147,6 +1155,9 @@ static int instance_init(const struct shell *shell, const void *p_config,
 
 	memset(shell->ctx, 0, sizeof(*shell->ctx));
 	shell->ctx->prompt = shell->default_prompt;
+	if (CONFIG_SHELL_CMD_ROOT[0]) {
+		shell->ctx->selected_cmd = root_cmd_find(CONFIG_SHELL_CMD_ROOT);
+	}
 
 	history_init(shell);
 
@@ -1166,6 +1177,7 @@ static int instance_init(const struct shell *shell, const void *p_config,
 
 	z_flag_tx_rdy_set(shell, true);
 	z_flag_echo_set(shell, IS_ENABLED(CONFIG_SHELL_ECHO_STATUS));
+	z_flag_obscure_set(shell, IS_ENABLED(CONFIG_SHELL_START_OBSCURED));
 	z_flag_mode_delete_set(shell,
 			     IS_ENABLED(CONFIG_SHELL_BACKSPACE_MODE_DELETE));
 	shell->ctx->vt100_ctx.cons.terminal_wid =
@@ -1232,7 +1244,13 @@ static void shell_signal_handle(const struct shell *shell,
 
 static void kill_handler(const struct shell *shell)
 {
-	(void)instance_uninit(shell);
+	int err = instance_uninit(shell);
+
+	if (shell->ctx->uninit_cb) {
+		shell->ctx->uninit_cb(shell, err);
+	}
+
+	shell->ctx->tid = NULL;
 	k_thread_abort(k_current_get());
 }
 
@@ -1249,7 +1267,8 @@ void shell_thread(void *shell_handle, void *arg_log_backend,
 		return;
 	}
 
-	if (IS_ENABLED(CONFIG_SHELL_LOG_BACKEND) && log_backend) {
+	if (IS_ENABLED(CONFIG_SHELL_LOG_BACKEND) && log_backend
+	    && !IS_ENABLED(CONFIG_SHELL_START_OBSCURED)) {
 		z_shell_log_backend_enable(shell->log_backend, (void *)shell,
 					   log_level);
 	}
@@ -1296,6 +1315,10 @@ int shell_init(const struct shell *shell, const void *transport_config,
 	__ASSERT_NO_MSG(shell);
 	__ASSERT_NO_MSG(shell->ctx && shell->iface && shell->default_prompt);
 
+	if (shell->ctx->tid) {
+		return -EALREADY;
+	}
+
 	int err = instance_init(shell, transport_config, use_colors);
 
 	if (err != 0) {
@@ -1314,7 +1337,7 @@ int shell_init(const struct shell *shell, const void *transport_config,
 	return 0;
 }
 
-int shell_uninit(const struct shell *shell)
+void shell_uninit(const struct shell *shell, shell_uninit_cb_t cb)
 {
 	__ASSERT_NO_MSG(shell);
 
@@ -1322,12 +1345,19 @@ int shell_uninit(const struct shell *shell)
 		struct k_poll_signal *signal =
 				&shell->ctx->signals[SHELL_SIGNAL_KILL];
 
+		shell->ctx->uninit_cb = cb;
 		/* signal kill message */
 		(void)k_poll_signal_raise(signal, 0);
 
-		return 0;
+		return;
+	}
+
+	int err = instance_uninit(shell);
+
+	if (cb) {
+		cb(shell, err);
 	} else {
-		return instance_uninit(shell);
+		__ASSERT_NO_MSG(0);
 	}
 }
 
@@ -1376,13 +1406,8 @@ void shell_process(const struct shell *shell)
 	__ASSERT_NO_MSG(shell);
 	__ASSERT_NO_MSG(shell->ctx);
 
-	union shell_internal internal;
-
-	internal.value = 0U;
-	internal.flags.processing = 1U;
-
-	(void)atomic_or((atomic_t *)&shell->ctx->internal.value,
-			internal.value);
+	/* atomically set the processing flag */
+	z_flag_processing_set(shell, true);
 
 	switch (shell->ctx->state) {
 	case SHELL_STATE_UNINITIALIZED:
@@ -1397,10 +1422,8 @@ void shell_process(const struct shell *shell)
 		break;
 	}
 
-	internal.value = 0xFFFFFFFF;
-	internal.flags.processing = 0U;
-	(void)atomic_and((atomic_t *)&shell->ctx->internal.value,
-			 internal.value);
+	/* atomically clear the processing flag */
+	z_flag_processing_set(shell, false);
 }
 
 /* This function mustn't be used from shell context to avoid deadlock.
@@ -1557,6 +1580,51 @@ int shell_execute_cmd(const struct shell *shell, const char *cmd)
 	k_mutex_unlock(&shell->ctx->wr_mtx);
 
 	return ret_val;
+}
+
+int shell_insert_mode_set(const struct shell *shell, bool val)
+{
+	if (shell == NULL) {
+		return -EINVAL;
+	}
+
+	return (int)z_flag_insert_mode_set(shell, val);
+}
+
+int shell_use_colors_set(const struct shell *shell, bool val)
+{
+	if (shell == NULL) {
+		return -EINVAL;
+	}
+
+	return (int)z_flag_use_colors_set(shell, val);
+}
+
+int shell_echo_set(const struct shell *shell, bool val)
+{
+	if (shell == NULL) {
+		return -EINVAL;
+	}
+
+	return (int)z_flag_echo_set(shell, val);
+}
+
+int shell_obscure_set(const struct shell *shell, bool val)
+{
+	if (shell == NULL) {
+		return -EINVAL;
+	}
+
+	return (int)z_flag_obscure_set(shell, val);
+}
+
+int shell_mode_delete_set(const struct shell *shell, bool val)
+{
+	if (shell == NULL) {
+		return -EINVAL;
+	}
+
+	return (int)z_flag_mode_delete_set(shell, val);
 }
 
 static int cmd_help(const struct shell *shell, size_t argc, char **argv)

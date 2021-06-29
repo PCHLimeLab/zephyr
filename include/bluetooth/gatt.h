@@ -18,6 +18,7 @@
  */
 
 #include <stddef.h>
+#include <sys/slist.h>
 #include <sys/types.h>
 #include <sys/util.h>
 #include <bluetooth/conn.h>
@@ -181,6 +182,22 @@ struct bt_gatt_include {
 	uint16_t end_handle;
 };
 
+/** @brief GATT callback structure. */
+struct bt_gatt_cb {
+	/** @brief The maximum ATT MTU on a connection has changed.
+	 *
+	 *  This callback notifies the application that the maximum TX or RX
+	 *  ATT MTU has increased.
+	 *
+	 *  @param conn Connection object.
+	 *  @param tx Updated TX ATT MTU.
+	 *  @param rx Updated RX ATT MTU.
+	 */
+	void (*att_mtu_updated)(struct bt_conn *conn, uint16_t tx, uint16_t rx);
+
+	sys_snode_t node;
+};
+
 /** Characteristic Properties Bit field values */
 
 /** @def BT_GATT_CHRC_BROADCAST
@@ -276,6 +293,22 @@ struct bt_gatt_ccc {
 	uint16_t flags;
 };
 
+/** Server Characteristic Configuration Values */
+
+/** @def BT_GATT_SCC_BROADCAST
+ *  @brief Server Characteristic Configuration Broadcast
+ *
+ *  If set, the characteristic value shall be broadcast in the advertising data
+ *  when the server is advertising.
+ */
+#define BT_GATT_SCC_BROADCAST                   0x0001
+
+/** Server Characterestic Configuration Attribute Value */
+struct bt_gatt_scc {
+	/** Server Characteristic Configuration flags */
+	uint16_t flags;
+};
+
 /** @brief GATT Characteristic Presentation Format Attribute Value. */
 struct bt_gatt_cpf {
 	/** Format of the value of the characteristic */
@@ -298,17 +331,25 @@ struct bt_gatt_cpf {
  * @{
  */
 
+/** @brief Register GATT callbacks.
+ *
+ *  Register callbacks to monitor the state of GATT.
+ *
+ *  @param cb Callback struct.
+ */
+void bt_gatt_cb_register(struct bt_gatt_cb *cb);
+
 /** @brief Register GATT service.
  *
  *  Register GATT service. Applications can make use of
  *  macros such as BT_GATT_PRIMARY_SERVICE, BT_GATT_CHARACTERISTIC,
  *  BT_GATT_DESCRIPTOR, etc.
  *
- *  When using @option{CONFIG_BT_SETTINGS} then all services that should have
+ *  When using @kconfig{CONFIG_BT_SETTINGS} then all services that should have
  *  bond configuration loaded, i.e. CCC values, must be registered before
  *  calling @ref settings_load.
  *
- *  When using @option{CONFIG_BT_GATT_CACHING} and @option{CONFIG_BT_SETTINGS}
+ *  When using @kconfig{CONFIG_BT_GATT_CACHING} and @kconfig{CONFIG_BT_SETTINGS}
  *  then all services that should be included in the GATT Database Hash
  *  calculation should be added before calling @ref settings_load.
  *  All services registered after settings_load will trigger a new database hash
@@ -391,6 +432,24 @@ static inline void bt_gatt_foreach_attr(uint16_t start_handle, uint16_t end_hand
  *  @return The next attribute or NULL if it cannot be found.
  */
 struct bt_gatt_attr *bt_gatt_attr_next(const struct bt_gatt_attr *attr);
+
+/** @brief Find Attribute by UUID.
+ *
+ *  Find the attribute with the matching UUID.
+ *  To limit the search to a service set the attr to the service attributes and
+ *  the attr_count to the service attribute count .
+ *
+ *  @param attr        Pointer to an attribute that serves as the starting point
+ *                     for the search of a match for the UUID.
+ *                     Passing NULL will search the entire range.
+ *  @param attr_count  The number of attributes from the starting point to
+ *                     search for a match for the UUID.
+ *                     Set to 0 to search until the end.
+ *  @param uuid        UUID to match.
+ */
+struct bt_gatt_attr *bt_gatt_find_by_uuid(const struct bt_gatt_attr *attr,
+					  uint16_t attr_count,
+					  const struct bt_uuid *uuid);
 
 /** @brief Get Attribute handle.
  *
@@ -606,10 +665,12 @@ ssize_t bt_gatt_attr_read_chrc(struct bt_conn *conn,
 						   })),                      \
 	BT_GATT_ATTRIBUTE(_uuid, _perm, _read, _write, _value)
 
-#if IS_ENABLED(CONFIG_BT_SETTINGS_CCC_LAZY_LOADING)
+#if defined(CONFIG_BT_SETTINGS_CCC_LAZY_LOADING)
 	#define BT_GATT_CCC_MAX (CONFIG_BT_MAX_CONN)
-#else
+#elif defined(CONFIG_BT_CONN)
 	#define BT_GATT_CCC_MAX (CONFIG_BT_MAX_PAIRED + CONFIG_BT_MAX_CONN)
+#else
+	#define BT_GATT_CCC_MAX 0
 #endif
 
 /** @brief GATT CCC configuration entry. */
@@ -885,9 +946,17 @@ ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
 typedef void (*bt_gatt_complete_func_t) (struct bt_conn *conn, void *user_data);
 
 struct bt_gatt_notify_params {
-	/** Notification Attribute UUID type */
+	/** @brief Notification Attribute UUID type
+	 *
+	 *  Optional, use to search for an attribute with matching UUID when
+	 *  the attribute object pointer is not known.
+	 */
 	const struct bt_uuid *uuid;
-	/** Notification Attribute object*/
+	/** @brief Notification Attribute object
+	 *
+	 *  Optional if uuid is provided, in this case it will be used as start
+	 *  range to search for the attribute with the given UUID.
+	 */
 	const struct bt_gatt_attr *attr;
 	/** Notification Value data */
 	const void *data;
@@ -909,10 +978,10 @@ struct bt_gatt_notify_params {
  *  When called from the System Workqueue context this API will not wait for
  *  resources for the callback but instead return an error.
  *  The number of pending callbacks can be increased with the
- *  @option{CONFIG_BT_CONN_TX_MAX} option.
+ *  @kconfig{CONFIG_BT_CONN_TX_MAX} option.
  *
  *  Alternatively it is possible to notify by UUID by setting it on the
- *  parameters, when using this method the attribute given is used as the
+ *  parameters, when using this method the attribute if provided is used as the
  *  start range when looking up for possible matches.
  *
  *  @param conn Connection object.
@@ -1025,9 +1094,17 @@ typedef void (*bt_gatt_indicate_params_destroy_t)(
 
 /** @brief GATT Indicate Value parameters */
 struct bt_gatt_indicate_params {
-	/** Notification Attribute UUID type */
+	/** @brief Indicate Attribute UUID type
+	 *
+	 *  Optional, use to search for an attribute with matching UUID when
+	 *  the attribute object pointer is not known.
+	 */
 	const struct bt_uuid *uuid;
-	/** Indicate Attribute object*/
+	/** @brief Indicate Attribute object
+	 *
+	 *  Optional if uuid is provided, in this case it will be used as start
+	 *  range to search for the attribute with the given UUID.
+	 */
 	const struct bt_gatt_attr *attr;
 	/** Indicate Value callback */
 	bt_gatt_indicate_func_t func;
@@ -1054,7 +1131,7 @@ struct bt_gatt_indicate_params {
  *  BT_GATT_CHARACTERISTIC.
  *
  *  Alternatively it is possible to indicate by UUID by setting it on the
- *  parameters, when using this method the attribute given is used as the
+ *  parameters, when using this method the attribute if provided is used as the
  *  start range when looking up for possible matches.
  *
  *  @note This procedure is asynchronous therefore the parameters need to
@@ -1197,6 +1274,17 @@ enum {
 	 *        as it may incur in more round trips.
 	 */
 	BT_GATT_DISCOVER_ATTRIBUTE,
+	/** @brief Discover standard characteristic descriptor values.
+	 *
+	 *  Discover standard characterestic descriptor values and their
+	 *  properties.
+	 *  Supported descriptors:
+	 *   - Characteristic Extended Properties
+	 *   - Client Characteristic Configuration
+	 *   - Server Characteristic Configuration
+	 *   - Characteristic Presentation Format
+	 */
+	BT_GATT_DISCOVER_STD_CHAR_DESC,
 };
 
 /** @brief GATT Discover Attributes parameters */
@@ -1376,7 +1464,7 @@ int bt_gatt_write(struct bt_conn *conn, struct bt_gatt_write_params *params);
  *  When called from the System Workqueue context this API will not wait for
  *  resources for the callback but instead return an error.
  *  The number of pending callbacks can be increased with the
- *  @option{CONFIG_BT_CONN_TX_MAX} option.
+ *  @kconfig{CONFIG_BT_CONN_TX_MAX} option.
 
  *
  *  @note By using a callback it also disable the internal flow control
@@ -1424,6 +1512,10 @@ struct bt_gatt_subscribe_params;
 
 /** @typedef bt_gatt_notify_func_t
  *  @brief Notification callback function
+ *
+ *  In the case of an empty notification, the @p data pointer will be non-NULL
+ *  while the @p length will be 0, which is due to the special case where
+ *  a @p data NULL pointer means unsubscribed.
  *
  *  @param conn Connection object. May be NULL, indicating that the peer is
  *              being unpaired

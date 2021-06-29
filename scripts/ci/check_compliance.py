@@ -539,7 +539,6 @@ UNDEF_KCONFIG_WHITELIST = {
     "FOO_LOG_LEVEL",
     "FOO_SETTING_1",
     "FOO_SETTING_2",
-    "LIS2DW12_INT_PIN",
     "LSM6DSO_INT_PIN",
     "MISSING",
     "MODULES",
@@ -552,6 +551,7 @@ UNDEF_KCONFIG_WHITELIST = {
     "REG1",
     "REG2",
     "SAMPLE_MODULE_LOG_LEVEL",  # Used as an example in samples/subsys/logging
+    "SAMPLE_MODULE_LOG_LEVEL_DBG",  # Used in tests/subsys/logging/log_api
     "SEL",
     "SHIFT",
     "SOC_WATCH",  # Issue 13749

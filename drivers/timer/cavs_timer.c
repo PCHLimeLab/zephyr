@@ -121,7 +121,7 @@ static void compare_isr(const void *arg)
 	sys_clock_announce(dticks);
 }
 
-int sys_clock_driver_init(const struct device *device)
+int sys_clock_driver_init(const struct device *dev)
 {
 	uint64_t curr = count();
 
@@ -193,6 +193,6 @@ void smp_timer_init(void)
 			+ CAVS_ICTL_INT_CPU_OFFSET(arch_curr_cpu()->id)
 			+ 0x04,
 		    22 + TIMER);
-	irq_enable(XTENSA_IRQ_NUMBER(TIMER_IRQ));
+	irq_enable(TIMER_IRQ);
 }
 #endif

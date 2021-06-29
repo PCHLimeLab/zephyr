@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <logging/log_backend.h>
+#include <logging/log_output_dict.h>
 #include <logging/log_backend_std.h>
 #include <assert.h>
 #include <fs/fs.h>
@@ -69,7 +70,7 @@ static int create_log_dir(const char *path)
 		return 0;
 	}
 
-	while (1) {
+	while (true) {
 		next++;
 		if (next > last) {
 			return 0;
@@ -116,7 +117,7 @@ static int check_log_file_exist(int num)
 		return -EIO;
 	}
 
-	while (1) {
+	while (true) {
 		rc = fs_readdir(&dir, &ent);
 		if (rc < 0) {
 			(void) fs_closedir(&dir);
@@ -203,7 +204,11 @@ int write_log_to_file(uint8_t *data, size_t length, void *ctx)
 			length = 0;
 		}
 
-		fs_sync(f);
+		rc = fs_sync(f);
+		if (rc < 0) {
+			/* Something is wrong */
+			goto on_error;
+		}
 	}
 
 	return length;
@@ -390,7 +395,7 @@ static int del_oldest_log(void)
 	int rc;
 	static char dellname[MAX_PATH_LEN];
 
-	while (1) {
+	while (true) {
 		snprintf(dellname, sizeof(dellname), "%s/%s%04d",
 			 CONFIG_LOG_BACKEND_FS_DIR,
 			 CONFIG_LOG_BACKEND_FS_FILE_PREFIX, oldest);
@@ -428,7 +433,7 @@ static void put(const struct log_backend *const backend,
 	log_backend_std_put(&log_output, 0, msg);
 }
 
-static void log_backend_fs_init(void)
+static void log_backend_fs_init(const struct log_backend *const backend)
 {
 }
 
@@ -444,10 +449,28 @@ static void dropped(const struct log_backend *const backend, uint32_t cnt)
 {
 	ARG_UNUSED(backend);
 
-	log_backend_std_dropped(&log_output, cnt);
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_FS_OUTPUT_DICTIONARY)) {
+		log_dict_output_dropped_process(&log_output, cnt);
+	} else {
+		log_backend_std_dropped(&log_output, cnt);
+	}
+}
+
+static void process(const struct log_backend *const backend,
+		union log_msg2_generic *msg)
+{
+	uint32_t flags = log_backend_std_get_flags();
+
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_FS_OUTPUT_DICTIONARY)) {
+		log_dict_output_msg2_process(&log_output,
+					     &msg->log, flags);
+	} else {
+		log_output_msg2_process(&log_output, &msg->log, flags);
+	}
 }
 
 static const struct log_backend_api log_backend_fs_api = {
+	.process = IS_ENABLED(CONFIG_LOG2) ? process : NULL,
 	.put = put,
 	.put_sync_string = NULL,
 	.put_sync_hexdump = NULL,

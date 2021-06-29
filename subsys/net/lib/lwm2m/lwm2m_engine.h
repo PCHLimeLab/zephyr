@@ -10,7 +10,12 @@
 
 #include "lwm2m_object.h"
 
-#define LWM2M_PROTOCOL_VERSION "1.0"
+#define LWM2M_PROTOCOL_VERSION_MAJOR 1
+#define LWM2M_PROTOCOL_VERSION_MINOR 0
+
+#define LWM2M_PROTOCOL_VERSION_STRING STRINGIFY(LWM2M_PROTOCOL_VERSION_MAJOR) \
+				      "." \
+				      STRINGIFY(LWM2M_PROTOCOL_VERSION_MINOR)
 
 /* LWM2M / CoAP Content-Formats */
 #define LWM2M_FORMAT_PLAIN_TEXT		0
@@ -72,6 +77,8 @@ struct lwm2m_engine_obj_inst *lwm2m_engine_get_obj_inst(
 struct lwm2m_engine_res *lwm2m_engine_get_res(
 					const struct lwm2m_obj_path *path);
 
+bool lwm2m_engine_shall_report_obj_version(const struct lwm2m_engine_obj *obj);
+
 /* LwM2M context functions */
 int lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx);
 void lwm2m_engine_context_init(struct lwm2m_ctx *client_ctx);
@@ -84,7 +91,7 @@ int lwm2m_put_message_buf(uint8_t *buf);
 struct lwm2m_message *lwm2m_get_message(struct lwm2m_ctx *client_ctx);
 void lwm2m_reset_message(struct lwm2m_message *msg, bool release);
 int lwm2m_init_message(struct lwm2m_message *msg);
-int lwm2m_send_message(struct lwm2m_message *msg);
+int lwm2m_send_message_async(struct lwm2m_message *msg);
 int lwm2m_send_empty_ack(struct lwm2m_ctx *client_ctx, uint16_t mid);
 
 int lwm2m_register_payload_handler(struct lwm2m_message *msg);

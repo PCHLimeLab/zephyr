@@ -64,6 +64,8 @@ described in :ref:`getting_started`. Then install additional tools
 that are only required to generate the documentation,
 as described below:
 
+.. doc_processors_installation_start
+
 .. tabs::
 
    .. group-tab:: Linux
@@ -96,6 +98,8 @@ as described below:
 
    .. group-tab:: macOS
 
+      Use ``brew`` and ``tlmgr`` to install the tools:
+
       .. code-block:: console
 
          brew install doxygen mactex librsvg
@@ -104,7 +108,7 @@ as described below:
 
    .. group-tab:: Windows
 
-      Run in an Administrator ``cmd.exe`` prompt:
+      Open a ``cmd.exe`` window as **Administrator** and run the following command:
 
       .. code-block:: console
 
@@ -113,9 +117,11 @@ as described below:
       .. note::
          On Windows, the Sphinx executable ``sphinx-build.exe`` is placed in
          the ``Scripts`` folder of your Python installation path.
-         Dependending on how you have installed Python, you may need to
+         Dependending on how you have installed Python, you might need to
          add this folder to your ``PATH`` environment variable. Follow
          the instructions in `Windows Python Path`_ to add those if needed.
+
+.. doc_processors_installation_end
 
 Documentation presentation theme
 ********************************
@@ -180,13 +186,13 @@ of the build folder and run ``cmake`` and then ``ninja`` again.
 
    If you add or remove a file from the documentation, you need to re-run CMake.
 
-On Unix platforms a convenience :zephyr_file:`Makefile` at the root folder
+On Unix platforms a convenience :zephyr_file:`Makefile` at the ``doc`` folder
 of the Zephyr repository can be used to build the documentation directly from
 there:
 
 .. code-block:: console
 
-   cd ~/zephyr
+   cd ~/zephyr/doc
 
    # To generate HTML output
    make htmldocs
@@ -197,24 +203,20 @@ there:
 Filtering expected warnings
 ***************************
 
-Alas, there are some known issues with the doxygen/Sphinx/Breathe
-processing that generates warnings for some constructs, in particular
-around unnamed structures in nested unions or structs.
-While these issues are being considered for fixing in
-Sphinx/Breathe, we've added a post-processing filter on the output of
-the documentation build process to check for "expected" messages from the
-generation process output.
+There are some known issues with Sphinx/Breathe that generate Sphinx warnings
+even though the input is valid C code. While these issues are being considered
+for fixing we have created a Sphinx extension that allows to filter them out
+based on a set of regular expressions. The extension is named
+``zephyr.warnings_filter`` and it is located at
+``doc/_extensions/zephyr/warnings_filter.py``. The warnings to be filtered out
+can be added to the ``doc/known-warnings.txt`` file.
 
-The output from the Sphinx build is processed by the python script
-``scripts/filter-known-issues.py`` together with a set of filter
-configuration files in the ``.known-issues/doc`` folder.  (This
-filtering is done as part of the ``doc/CMakeLists.txt`` CMake listfile.)
+The most common warning reported by Sphinx/Breathe is related to duplicate C
+declarations. This warning may be caused by different Sphinx/Breathe issues:
 
-If you're contributing components included in the Zephyr API
-documentation and run across these warnings, you can include filtering
-them out as "expected" warnings by adding a conf file to the
-``.known-issues/doc`` folder, following the example of other conf files
-found there.
+- Multiple declarations of the same object are not supported
+- Different objects (e.g. a struct and a function) can not share the same name
+- Nested elements (e.g. in a struct or union) can not share the same name
 
 Developer-mode Document Building
 ********************************

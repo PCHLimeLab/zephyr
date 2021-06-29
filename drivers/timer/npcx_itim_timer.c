@@ -113,8 +113,11 @@ static inline int npcx_itim_evt_enable(void)
 	while (!IS_BIT_SET(evt_tmr->ITCTS32, NPCX_ITCTSXX_ITEN)) {
 		if (npcx_itim_get_sys_cyc64() - cyc_start >
 						NPCX_ITIM_EN_TIMEOUT_CYCLES) {
-			LOG_ERR("Timeout: enabling EVT timer!");
-			return -ETIMEDOUT;
+			/* ITEN bit is still unset? */
+			if (!IS_BIT_SET(evt_tmr->ITCTS32, NPCX_ITCTSXX_ITEN)) {
+				LOG_ERR("Timeout: enabling EVT timer!");
+				return -ETIMEDOUT;
+			}
 		}
 	}
 
@@ -134,13 +137,12 @@ static int npcx_itim_start_evt_tmr_by_tick(int32_t ticks)
 	 * Get desired cycles of event timer from the requested ticks which
 	 * round up to next tick boundary.
 	 */
-	if (ticks <= 0) {
-		ticks = 1;
-	}
-
 	if (ticks == K_TICKS_FOREVER) {
 		cyc_evt_timeout = NPCX_ITIM32_MAX_CNT;
 	} else {
+		if (ticks <= 0) {
+			ticks = 1;
+		}
 		cyc_evt_timeout = MIN(EVT_CYCLES_FROM_TICKS(ticks),
 				      NPCX_ITIM32_MAX_CNT);
 	}
@@ -265,12 +267,12 @@ uint32_t sys_clock_cycle_get_32(void)
 	return (uint32_t)(current);
 }
 
-int sys_clock_driver_init(const struct device *device)
+int sys_clock_driver_init(const struct device *dev)
 {
-	ARG_UNUSED(device);
+	ARG_UNUSED(dev);
 	int ret;
-	const struct device *const clk_dev =
-					device_get_binding(NPCX_CLK_CTRL_NAME);
+	uint32_t sys_tmr_rate;
+	const struct device *const clk_dev = DEVICE_DT_GET(NPCX_CLK_CTRL_NODE);
 
 	/* Turn on all itim module clocks used for counting */
 	for (int i = 0; i < ARRAY_SIZE(itim_clk_cfg); i++) {
@@ -280,6 +282,23 @@ int sys_clock_driver_init(const struct device *device)
 			LOG_ERR("Turn on timer %d clock failed.", i);
 			return ret;
 		}
+	}
+
+	/*
+	 * In npcx series, we use ITIM64 as system kernel timer. Its source
+	 * clock frequency must equal to CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC.
+	 */
+	ret = clock_control_get_rate(clk_dev, (clock_control_subsys_t *)
+			&itim_clk_cfg[1], &sys_tmr_rate);
+	if (ret < 0) {
+		LOG_ERR("Get ITIM64 clock rate failed %d", ret);
+		return ret;
+	}
+
+	if (sys_tmr_rate != CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC) {
+		LOG_ERR("CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC doesn't match "
+			"ITIM64 clock frequency %d", sys_tmr_rate);
+		return -EINVAL;
 	}
 
 	/*

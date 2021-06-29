@@ -29,7 +29,7 @@
 #endif
 
 #ifdef CONFIG_PM_DEVICE
-#include <power/power.h>
+#include <pm/device.h>
 #endif
 
 static int gpio_dw_port_set_bits_raw(const struct device *port, uint32_t mask);
@@ -221,7 +221,7 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 	uint32_t dir_reg;
 
 	/* Check for invalid pin number */
-	if (pin >= config->bits) {
+	if (pin >= config->ngpios) {
 		return -EINVAL;
 	}
 
@@ -313,7 +313,7 @@ static inline int gpio_dw_config(const struct device *port,
 	uint32_t io_flags;
 
 	/* Check for invalid pin number */
-	if (pin >= config->bits) {
+	if (pin >= config->ngpios) {
 		return -EINVAL;
 	}
 
@@ -443,7 +443,7 @@ static uint32_t gpio_dw_get_power_state(const struct device *port)
 static inline int gpio_dw_suspend_port(const struct device *port)
 {
 	gpio_dw_clock_off(port);
-	gpio_dw_set_power_state(port, DEVICE_PM_SUSPEND_STATE);
+	gpio_dw_set_power_state(port, PM_DEVICE_STATE_SUSPEND);
 
 	return 0;
 }
@@ -451,7 +451,7 @@ static inline int gpio_dw_suspend_port(const struct device *port)
 static inline int gpio_dw_resume_from_suspend_port(const struct device *port)
 {
 	gpio_dw_clock_on(port);
-	gpio_dw_set_power_state(port, DEVICE_PM_ACTIVE_STATE);
+	gpio_dw_set_power_state(port, PM_DEVICE_STATE_ACTIVE);
 	return 0;
 }
 
@@ -461,22 +461,22 @@ static inline int gpio_dw_resume_from_suspend_port(const struct device *port)
 */
 static int gpio_dw_device_ctrl(const struct device *port,
 			       uint32_t ctrl_command,
-			       void *context, device_pm_cb cb, void *arg)
+			       uint32_t *state, pm_device_cb cb, void *arg)
 {
 	int ret = 0;
 
-	if (ctrl_command == DEVICE_PM_SET_POWER_STATE) {
-		if (*((uint32_t *)context) == DEVICE_PM_SUSPEND_STATE) {
+	if (ctrl_command == PM_DEVICE_STATE_SET) {
+		if (*state == PM_DEVICE_STATE_SUSPEND) {
 			ret = gpio_dw_suspend_port(port);
-		} else if (*((uint32_t *)context) == DEVICE_PM_ACTIVE_STATE) {
+		} else if (*state == PM_DEVICE_STATE_ACTIVE) {
 			ret = gpio_dw_resume_from_suspend_port(port);
 		}
-	} else if (ctrl_command == DEVICE_PM_GET_POWER_STATE) {
-		*((uint32_t *)context) = gpio_dw_get_power_state(port);
+	} else if (ctrl_command == PM_DEVICE_STATE_GET) {
+		*state = gpio_dw_get_power_state(port);
 	}
 
 	if (cb) {
-		cb(port, ret, context, arg);
+		cb(port, ret, state, arg);
 	}
 	return ret;
 }
@@ -544,7 +544,7 @@ static int gpio_dw_initialize(const struct device *port)
 		config->config_func(port);
 	}
 
-	gpio_dw_set_power_state(port, DEVICE_PM_ACTIVE_STATE);
+	gpio_dw_set_power_state(port, PM_DEVICE_STATE_ACTIVE);
 
 	return 0;
 }
@@ -560,7 +560,7 @@ static const struct gpio_dw_config gpio_config_0 = {
 #ifdef CONFIG_GPIO_DW_0_IRQ_DIRECT
 	.irq_num = DT_INST_IRQN(0),
 #endif
-	.bits = DT_INST_PROP(0, bits),
+	.ngpios = DT_INST_PROP(0, ngpios),
 	.config_func = gpio_config_0_irq,
 #ifdef CONFIG_GPIO_DW_0_IRQ_SHARED
 	.shared_irq_dev_name = DT_INST_IRQ_BY_NAME(0, shared_name, irq),
@@ -621,7 +621,7 @@ static const struct gpio_dw_config gpio_dw_config_1 = {
 #ifdef CONFIG_GPIO_DW_1_IRQ_DIRECT
 	.irq_num = DT_INST_IRQN(1),
 #endif
-	.bits = DT_INST_PROP(1, bits),
+	.ngpios = DT_INST_PROP(1, ngpios),
 	.config_func = gpio_config_1_irq,
 
 #ifdef CONFIG_GPIO_DW_1_IRQ_SHARED
@@ -682,7 +682,7 @@ static const struct gpio_dw_config gpio_dw_config_2 = {
 #ifdef CONFIG_GPIO_DW_2_IRQ_DIRECT
 	.irq_num = DT_INST_IRQN(2),
 #endif
-	.bits = DT_INST_PROP(2, bits),
+	.ngpios = DT_INST_PROP(2, ngpios),
 	.config_func = gpio_config_2_irq,
 
 #ifdef CONFIG_GPIO_DW_2_IRQ_SHARED
@@ -743,7 +743,7 @@ static const struct gpio_dw_config gpio_dw_config_3 = {
 #ifdef CONFIG_GPIO_DW_3_IRQ_DIRECT
 	.irq_num = DT_INST_IRQN(3),
 #endif
-	.bits = DT_INST_PROP(3, bits),
+	.ngpios = DT_INST_PROP(3, ngpios),
 	.config_func = gpio_config_3_irq,
 
 #ifdef CONFIG_GPIO_DW_3_IRQ_SHARED

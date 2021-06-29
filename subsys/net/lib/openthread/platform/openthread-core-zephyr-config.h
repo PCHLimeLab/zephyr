@@ -92,17 +92,59 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_TIMING_ENABLE
+ *
+ * Define to 1 to enable software transmission target time logic.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_TIMING_ENABLE
+#define OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_TIMING_ENABLE                        \
+	(OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_SOFTWARE_RX_TIMING_ENABLE
+ *
+ * Define to 1 to enable software reception target time logic.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_SOFTWARE_RX_TIMING_ENABLE
+#define OPENTHREAD_CONFIG_MAC_SOFTWARE_RX_TIMING_ENABLE                        \
+	(OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
+ *
+ * Define as 1 to support IEEE 802.15.4-2015 Header IE (Information Element) generation and parsing,
+ * it must be set to support following features:
+ *    1. Time synchronization service feature (i.e., OPENTHREAD_CONFIG_TIME_SYNC_ENABLE is set).
+ *    2. Thread 1.2.
+ *
+ * @note If it's enabled, platform must support interrupt context and concurrent access AES.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
+#if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE ||                                      \
+	(OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
+#define OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT 1
+#else
+#define OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT 0
+#endif
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
  *
  * Define to 1 if you want to enable microsecond backoff timer implemented
  * in platform.
  *
  */
-#ifdef CONFIG_OPENTHREAD_PLATFORM_USEC_TIMER_ENABLE
-#define OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE 1
-#endif
+#define OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE                                               \
+	(CONFIG_OPENTHREAD_CSL_RECEIVER &&                                                         \
+	 (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2))
 
-/* Zephyr does not use OpenThreads heap. mbedTLS will use heap memory allocated
+/* Zephyr does not use OpenThread's heap. mbedTLS will use heap memory allocated
  * by Zephyr. Here, we use some dummy values to prevent OpenThread warnings.
  */
 
@@ -241,12 +283,33 @@
  *
  * For some reasons, CSL receivers wake up a little later than expected. This
  * variable specifies how much time that CSL receiver would wake up earlier
- * than the expected sample window. The time is in unit of 10 symbols.
+ * than the expected sample window. The time is in unit of microseconds.
  *
  */
 #ifdef CONFIG_OPENTHREAD_CSL_RECEIVE_TIME_AHEAD
 #define OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD \
 	CONFIG_OPENTHREAD_CSL_RECEIVE_TIME_AHEAD
 #endif /* CONFIG_OPENTHREAD_CSL_RECEIVE_TIME_AHEAD */
+
+/**
+ * @def OPENTHREAD_CONFIG_CSL_MIN_RECEIVE_ON
+ *
+ * The minimum CSL receive window (in microseconds) required to receive an IEEE 802.15.4 frame.
+ *
+ */
+#ifdef CONFIG_OPENTHREAD_CSL_MIN_RECEIVE_ON
+#define OPENTHREAD_CONFIG_CSL_MIN_RECEIVE_ON CONFIG_OPENTHREAD_CSL_MIN_RECEIVE_ON
+#endif /* CONFIG_OPENTHREAD_CSL_MIN_RECEIVE_ON */
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_SECURITY_ENABLE
+ *
+ * Set to 1 to enable software transmission security logic.
+ *
+ */
+#ifdef CONFIG_OPENTHREAD_MAC_SOFTWARE_TX_SECURITY_ENABLE
+#define OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_SECURITY_ENABLE                                          \
+	CONFIG_OPENTHREAD_MAC_SOFTWARE_TX_SECURITY_ENABLE
+#endif /* CONFIG_OPENTHREAD_MAC_SOFTWARE_TX_SECURITY_ENABLE */
 
 #endif  /* OPENTHREAD_CORE_ZEPHYR_CONFIG_H_ */

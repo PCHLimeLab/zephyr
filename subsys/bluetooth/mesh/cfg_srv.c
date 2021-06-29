@@ -201,7 +201,10 @@ static uint8_t _mod_pub_set(struct bt_mesh_model *model, uint16_t pub_addr,
 		model->pub->count = 0U;
 
 		if (model->pub->update) {
-			k_delayed_work_cancel(&model->pub->timer);
+			/* If this fails, the timer will check pub->addr and
+			 * exit without transmitting.
+			 */
+			(void)k_work_cancel_delayable(&model->pub->timer);
 		}
 
 		if (IS_ENABLED(CONFIG_BT_SETTINGS) && store) {
@@ -239,10 +242,13 @@ static uint8_t _mod_pub_set(struct bt_mesh_model *model, uint16_t pub_addr,
 		BT_DBG("period %u ms", period_ms);
 
 		if (period_ms > 0) {
-			k_delayed_work_submit(&model->pub->timer,
-					      K_MSEC(period_ms));
+			k_work_reschedule(&model->pub->timer,
+					  K_MSEC(period_ms));
 		} else {
-			k_delayed_work_cancel(&model->pub->timer);
+			/* If this fails, publication will stop after the
+			 * ongoing set of retransmits.
+			 */
+			(void)k_work_cancel_delayable(&model->pub->timer);
 		}
 	}
 
@@ -1964,11 +1970,27 @@ send_list:
 	}
 }
 
+static void reset_send_start(uint16_t duration, int err, void *cb_data)
+{
+	if (err) {
+		BT_ERR("Sending Node Reset Status failed (err %d)", err);
+		bt_mesh_reset();
+	}
+}
+
+static void reset_send_end(int err, void *cb_data)
+{
+	bt_mesh_reset();
+}
+
 static void node_reset(struct bt_mesh_model *model,
 		       struct bt_mesh_msg_ctx *ctx,
 		       struct net_buf_simple *buf)
 {
-	static struct bt_mesh_proxy_idle_cb proxy_idle = {.cb = bt_mesh_reset};
+	static const struct bt_mesh_send_cb reset_cb = {
+		.start = reset_send_start,
+		.end = reset_send_end,
+	};
 
 	BT_MESH_MODEL_BUF_DEFINE(msg, OP_NODE_RESET_STATUS, 0);
 
@@ -1976,25 +1998,11 @@ static void node_reset(struct bt_mesh_model *model,
 	       ctx->net_idx, ctx->app_idx, ctx->addr, buf->len,
 	       bt_hex(buf->data, buf->len));
 
-
 	bt_mesh_model_msg_init(&msg, OP_NODE_RESET_STATUS);
 
-	/* Send the response first since we wont have any keys left to
-	 * send it later.
-	 */
-	if (bt_mesh_model_send(model, ctx, &msg, NULL, NULL)) {
+	if (bt_mesh_model_send(model, ctx, &msg, &reset_cb, NULL)) {
 		BT_ERR("Unable to send Node Reset Status");
 	}
-
-	if (!IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY)) {
-		bt_mesh_reset();
-		return;
-	}
-
-	/* If the response goes to a proxy node, we'll wait for the sending to
-	 * complete before moving on.
-	 */
-	bt_mesh_proxy_on_idle(&proxy_idle);
 }
 
 static void send_friend_status(struct bt_mesh_model *model,
@@ -2045,8 +2053,8 @@ static void lpn_timeout_get(struct bt_mesh_model *model,
 {
 	BT_MESH_MODEL_BUF_DEFINE(msg, OP_LPN_TIMEOUT_STATUS, 5);
 	struct bt_mesh_friend *frnd;
+	int32_t timeout_steps;
 	uint16_t lpn_addr;
-	int32_t timeout_ms;
 
 	lpn_addr = net_buf_simple_pull_le16(buf);
 
@@ -2062,20 +2070,21 @@ static void lpn_timeout_get(struct bt_mesh_model *model,
 	net_buf_simple_add_le16(&msg, lpn_addr);
 
 	if (!IS_ENABLED(CONFIG_BT_MESH_FRIEND)) {
-		timeout_ms = 0;
+		timeout_steps = 0;
 		goto send_rsp;
 	}
 
 	frnd = bt_mesh_friend_find(BT_MESH_KEY_ANY, lpn_addr, true, true);
 	if (!frnd) {
-		timeout_ms = 0;
+		timeout_steps = 0;
 		goto send_rsp;
 	}
 
-	timeout_ms = k_delayed_work_remaining_get(&frnd->timer) / 100;
+	/* PollTimeout should be reported in steps of 100ms. */
+	timeout_steps = frnd->poll_to / 100;
 
 send_rsp:
-	net_buf_simple_add_le24(&msg, timeout_ms);
+	net_buf_simple_add_le24(&msg, timeout_steps);
 
 	if (bt_mesh_model_send(model, ctx, &msg, NULL, NULL)) {
 		BT_ERR("Unable to send LPN PollTimeout Status");

@@ -28,6 +28,55 @@
 			gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
 		};
 	};
+
+	power-states {
+		stop0: state0 {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-idle";
+			substate-id = <1>;
+			min-residency-us = <100>;
+		};
+		stop1: state1 {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-idle";
+			substate-id = <2>;
+			min-residency-us = <500>;
+		};
+		stop2: state2 {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-idle";
+			substate-id = <3>;
+			min-residency-us = <900>;
+		};
+	};
+};
+
+&clk_msi {
+	status = "okay";
+	msi-range = <6>;
+	msi-pll-mode;
+};
+
+&clk_lse {
+	status = "okay";
+};
+
+&pll {
+	div-m = <1>;
+	mul-n = <55>;
+	div-p = <7>;
+	div-q = <2>;
+	div-r = <2>;
+	clocks = <&clk_msi>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(110)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <1>;
+	apb2-prescaler = <1>;
 };
 
 &usart1 {
@@ -48,6 +97,10 @@
 	};
 };
 
+&rng {
+	status = "okay";
+};
+
 &spi1 {
 	pinctrl-0 = <&spi1_sck_pg2 &spi1_miso_pg3 &spi1_mosi_pg4>;
 	cs-gpios = <&gpiog 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
@@ -60,5 +113,14 @@
 		reset-gpios = <&gpiog 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 		spi-max-frequency = <2000000>;
 		label = "SPBTLE-RF";
+	};
+};
+
+&timers2 {
+	status = "okay";
+
+	pwm2: pwm {
+		status = "okay";
+		pinctrl-0 = <&tim2_ch1_pa0>;
 	};
 };
